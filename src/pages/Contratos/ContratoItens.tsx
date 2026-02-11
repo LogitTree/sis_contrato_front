@@ -109,6 +109,23 @@ export default function ContratoItens() {
         }
     }
 
+    async function removerItem(itemId: number) {
+        const confirmar = window.confirm(
+            'Tem certeza que deseja remover este item do contrato?'
+        );
+
+        if (!confirmar) return;
+
+        try {
+            await api.delete(`/contratos/${id}/itens/${itemId}`);
+            toast.success('Item removido com sucesso');
+            carregarItens();
+        } catch (error) {
+            console.error(error);
+            toast.error('Erro ao remover item do contrato');
+        }
+    }
+
     useEffect(() => {
         async function load() {
             try {
@@ -293,11 +310,7 @@ export default function ContratoItens() {
                                                 color: '#dc2626',
                                             }}
                                             title="Remover item do contrato"
-                                            onClick={() =>
-                                                toast.info(
-                                                    'Remover item (próximo passo)'
-                                                )
-                                            }
+                                            onClick={() => removerItem(item.id)}
                                         >
                                             <FiTrash2 size={18} />
                                         </button>

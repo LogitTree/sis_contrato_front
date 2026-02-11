@@ -168,7 +168,7 @@ export default function Sidebar() {
           ...(isActive('/pedidosvenda') ? sidebarStyles.activeItem : {}),
         }}
         {...hoverEffect}
-        onClick={() => navigate('/pedidosvenda')}
+        onClick={() => navigate('/')}
       >
         <FiShoppingCart size={18} />
         Vendas

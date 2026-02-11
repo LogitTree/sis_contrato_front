@@ -23,6 +23,16 @@ type FormState = {
   qtd_maxima_contratada: string;
 };
 
+/* =========================
+   HELPERS
+========================= */
+function extrairArray(res: any): any[] {
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res?.data)) return res.data;
+  if (Array.isArray(res?.rows)) return res.rows;
+  return [];
+}
+
 export default function ModalAdicionarItem({
   contratoId,
   onClose,
@@ -39,8 +49,19 @@ export default function ModalAdicionarItem({
     qtd_maxima_contratada: '',
   });
 
+  /* =========================
+     LOAD PRODUTOS
+  ========================= */
   useEffect(() => {
-    api.get('/produtos').then(res => setProdutos(res.data));
+    api
+      .get('/produtos')
+      .then(res => {
+        setProdutos(extrairArray(res.data));
+      })
+      .catch(() => {
+        toast.error('Erro ao carregar produtos');
+        setProdutos([]);
+      });
   }, []);
 
   function handleChange(

@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from '../contexts/AuthContext';
-import PrivateRoute from './PrivateRoute';
+// import PrivateRoute from './PrivateRoute';
 
 import MainLayout from '../layouts/MainLayout';
 
@@ -33,16 +33,10 @@ export default function AppRoutes() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-          
           <Route path="/login" element={<Login />} />
 
-          <Route
-            element={
-              <PrivateRoute>
-                <MainLayout />
-              </PrivateRoute>
-            }
-          >
+          {/* SEM PrivateRoute */}
+          <Route element={<MainLayout />}>
             <Route path="/" element={<Dashboard />} />
 
             <Route path="/empresas" element={<EmpresasList />} />
@@ -72,9 +66,9 @@ export default function AppRoutes() {
 
             <Route path="/pedidosvenda" element={<PedidoVenda />} />
           </Route>
-
         </Routes>
       </AuthProvider>
     </BrowserRouter>
   );
 }
+

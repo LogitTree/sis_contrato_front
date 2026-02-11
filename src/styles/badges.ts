@@ -17,6 +17,6 @@ export const badgeStyles = {
   },
   warning: {
     background: '#fee2e2',
-    color: '#c32222',
+    color: '#991b1b',
   },
 };

@@ -172,14 +172,20 @@ export default function ProdutoEdit() {
   useEffect(() => {
     if (!form.grupo_id) {
       setSubgrupos([]);
-      setForm(prev => ({ ...prev, subgrupo_id: '' }));
       return;
     }
 
     api
-      .get('/subgrupos', { params: { grupo_id: form.grupo_id } })
-      .then(res => setSubgrupos(res.data.data || []))
-      .catch(() => setSubgrupos([]));
+      .get('/subgrupos', {
+        params: { grupo_id: Number(form.grupo_id) },
+      })
+      .then(res => {
+        // 🔥 backend retorna ARRAY DIRETO
+        setSubgrupos(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch(() => {
+        setSubgrupos([]);
+      });
   }, [form.grupo_id]);
 
   /* =========================

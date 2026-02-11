@@ -5,9 +5,9 @@ export interface Produto {
 
   nome: string;
   descricao?: string;
-  ativo?: boolean;
   unidade: string;
 
+  ativo: boolean;
   preco_referencia: number;
   custo_medio: number;
   ult_custo: number;

@@ -5,21 +5,41 @@ import api from '../../api/api';
 import { layoutStyles } from '../../styles/layout';
 import { formStyles } from '../../styles/form';
 import { buttonStyles } from '../../styles/buttons';
-// import { tableStyles } from '../../styles/table';
 
 import { toast } from 'react-toastify';
+
+/* =========================
+   TYPES
+========================= */
+type ContratoItemForm = {
+  produto_id: number | '';
+  unidade: string;
+  preco_unitario_contratado: number | '';
+  qtd_maxima_contratada: number | '';
+  valor_maximo_contratado?: number;
+};
 
 type ContratoForm = {
   numero: string;
   orgao_id: number | '';
   empresa_contratada_id: number | '';
-  tipo: string,
-  objeto?: string,
+  tipo: string;
+  objeto?: string;
   data_inicio: string;
   data_fim: string;
   observacao: string;
   status: 'ATIVO' | 'SUSPENSO' | 'ENCERRADO';
 };
+
+/* =========================
+   HELPERS
+========================= */
+function extrairArray(res: any): any[] {
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res?.data)) return res.data;
+  if (Array.isArray(res?.rows)) return res.rows;
+  return [];
+}
 
 export default function ContratoCreate() {
   const navigate = useNavigate();
@@ -27,9 +47,8 @@ export default function ContratoCreate() {
   const [loading, setLoading] = useState(false);
   const [orgaos, setOrgaos] = useState<any[]>([]);
   const [empresas, setEmpresas] = useState<any[]>([]);
-  const [itens, _setItens] = useState<ContratoItemForm[]>([]);
   const [_produtos, setProdutos] = useState<any[]>([]);
-
+  const [itens, _setItens] = useState<ContratoItemForm[]>([]);
 
   const [form, setForm] = useState<ContratoForm>({
     numero: '',
@@ -43,13 +62,6 @@ export default function ContratoCreate() {
     status: 'ATIVO',
   });
 
-  type ContratoItemForm = {
-    produto_id: number | '';
-    unidade: string;
-    preco_unitario_contratado: number | '';
-    qtd_maxima_contratada: number | '';
-    valor_maximo_contratado?: number;
-  };
   /* =========================
      Load Selects
   ========================= */
@@ -62,19 +74,27 @@ export default function ContratoCreate() {
           api.get('/produtos'),
         ]);
 
-        setOrgaos(orgaosRes.data);
-        setEmpresas(empresasRes.data);
-        setProdutos(produtosRes.data);
+        setOrgaos(extrairArray(orgaosRes.data));
+        setEmpresas(extrairArray(empresasRes.data));
+        setProdutos(extrairArray(produtosRes.data));
       } catch (err) {
         toast.error('Erro ao carregar dados');
+        setOrgaos([]);
+        setEmpresas([]);
+        setProdutos([]);
       }
     }
 
     loadData();
   }, []);
 
+  /* =========================
+     Handlers
+  ========================= */
   function handleChange(
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >
   ) {
     const { name, value } = e.target;
     setForm(prev => ({ ...prev, [name]: value }));
@@ -100,7 +120,6 @@ export default function ContratoCreate() {
         })),
       };
 
-
       await api.post('/contratos', payload);
 
       toast.success('Contrato criado com sucesso!');
@@ -113,34 +132,9 @@ export default function ContratoCreate() {
     }
   }
 
-  // function adicionarItem() {
-  //   setItens(prev => [
-  //     ...prev,
-  //     {
-  //       produto_id: '',
-  //       unidade: '',
-  //       preco_unitario_contratado: '',
-  //       qtd_maxima_contratada: '',
-  //     },
-  //   ]);
-  // }
-
-  // function alterarItem(
-  //   index: number,
-  //   campo: keyof ContratoItemForm,
-  //   valor: any
-  // ) {
-  //   setItens(prev => {
-  //     const copia = [...prev];
-  //     copia[index] = { ...copia[index], [campo]: valor };
-  //     return copia;
-  //   });
-  // }
-
-  // function removerItem(index: number) {
-  //   setItens(prev => prev.filter((_, i) => i !== index));
-  // }
-
+  /* =========================
+     Render
+  ========================= */
   return (
     <div style={layoutStyles.page}>
       <div style={layoutStyles.header}>
@@ -198,7 +192,8 @@ export default function ContratoCreate() {
               ))}
             </select>
           </div>
-          {/* ===== TIPO ===== */}
+
+          {/* ===== Tipo ===== */}
           <div style={formStyles.field}>
             <label style={formStyles.label}>Tipo do Contrato</label>
             <select
@@ -214,15 +209,14 @@ export default function ContratoCreate() {
             </select>
           </div>
 
-          {/* ===== OBJETO ===== */}
+          {/* ===== Objeto ===== */}
           <div style={formStyles.field}>
             <label style={formStyles.label}>Objeto do Contrato</label>
             <textarea
               name="objeto"
               value={form.objeto}
-              onChange={(e: any) => handleChange(e)}
+              onChange={handleChange}
               style={formStyles.textarea}
-              placeholder="Descreva o objeto do contrato"
             />
           </div>
 
@@ -259,7 +253,7 @@ export default function ContratoCreate() {
             <textarea
               name="observacao"
               value={form.observacao}
-              onChange={(e: any) => handleChange(e)}
+              onChange={handleChange}
               style={formStyles.textarea}
             />
           </div>

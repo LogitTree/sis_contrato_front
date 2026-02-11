@@ -26,13 +26,28 @@ type ContratoForm = {
   numero: string;
   orgao_id: string;
   empresa_contratada_id: string;
-  tipo: string,
-  objeto?: string,
+  tipo: string;
+  objeto?: string;
   data_inicio: string;
   data_fim: string;
   status: string;
   observacao: string;
 };
+
+/* =========================
+   HELPERS
+========================= */
+function extrairArray(res: any): any[] {
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res?.data)) return res.data;
+  if (Array.isArray(res?.rows)) return res.rows;
+  return [];
+}
+
+function extrairObjeto(res: any): any {
+  if (res?.data) return res.data;
+  return res;
+}
 
 /* =========================
    COMPONENT
@@ -71,7 +86,7 @@ export default function ContratoEdit() {
           api.get('/empresas'),
         ]);
 
-        const contrato = contratoRes.data;
+        const contrato = extrairObjeto(contratoRes.data);
 
         setForm({
           numero: contrato.numero ?? '',
@@ -87,15 +102,13 @@ export default function ContratoEdit() {
           observacao: contrato.observacao ?? '',
         });
 
-
-        setOrgaos(orgaosRes.data);
-        setEmpresas(empresasRes.data);
+        setOrgaos(extrairArray(orgaosRes.data));
+        setEmpresas(extrairArray(empresasRes.data));
       } catch (error) {
         console.error('🔥 ERRO AO CARREGAR:', error);
         toast.error('Erro ao carregar contrato');
         navigate('/contratos');
-      }
-      finally {
+      } finally {
         setLoadingData(false);
       }
     }
@@ -158,7 +171,6 @@ export default function ContratoEdit() {
 
       <div style={layoutStyles.card}>
         <form onSubmit={handleSubmit} style={formStyles.form}>
-          {/* ===== Dados Básicos ===== */}
           <h2 style={layoutStyles.subtitle}>Dados do Contrato</h2>
 
           <div style={formStyles.row}>
@@ -188,7 +200,6 @@ export default function ContratoEdit() {
             </div>
           </div>
 
-          {/* ===== Órgão / Empresa ===== */}
           <div style={formStyles.row}>
             <div style={formStyles.field}>
               <label style={formStyles.label}>Órgão Contratante</label>
@@ -226,7 +237,7 @@ export default function ContratoEdit() {
               </select>
             </div>
           </div>
-          {/* ===== TIPO ===== */}
+
           <div style={formStyles.field}>
             <label style={formStyles.label}>Tipo do Contrato</label>
             <select
@@ -242,7 +253,6 @@ export default function ContratoEdit() {
             </select>
           </div>
 
-          {/* ===== OBJETO ===== */}
           <div style={formStyles.field}>
             <label style={formStyles.label}>Objeto do Contrato</label>
             <textarea
@@ -250,10 +260,9 @@ export default function ContratoEdit() {
               value={form.objeto}
               onChange={handleChange}
               style={formStyles.textarea}
-              placeholder="Descreva o objeto do contrato"
             />
           </div>
-          {/* ===== Datas ===== */}
+
           <div style={formStyles.row}>
             <div style={formStyles.field}>
               <label style={formStyles.label}>Data Início</label>
@@ -278,7 +287,6 @@ export default function ContratoEdit() {
             </div>
           </div>
 
-          {/* ===== Observação ===== */}
           <div style={formStyles.field}>
             <label style={formStyles.label}>Observação</label>
             <textarea
@@ -289,7 +297,6 @@ export default function ContratoEdit() {
             />
           </div>
 
-          {/* ===== Actions ===== */}
           <div style={formStyles.actions}>
             <button
               type="submit"

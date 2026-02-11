@@ -245,7 +245,7 @@ export default function ProdutosList() {
                         <span
                           style={{
                             ...badgeStyles.base,
-                            ...((p.ativo)
+                            ...(p.ativo
                               ? badgeStyles.success
                               : badgeStyles.danger),
                           }}

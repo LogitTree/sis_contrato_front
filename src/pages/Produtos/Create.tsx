@@ -65,7 +65,7 @@ export default function ProdutoCreate() {
     border: '1px solid #e5e7eb',
     borderRadius: 8,
     padding: 20,
-    marginBottom: 1,
+    marginBottom: 16,
     backgroundColor: '#ffffff',
   };
 
@@ -83,29 +83,56 @@ export default function ProdutoCreate() {
   };
 
   /* =========================
-     Load grupos
+     Load Grupos
   ========================= */
   useEffect(() => {
-    api.get('/grupos').then(res => setGrupos(res.data));
+    api
+      .get('/grupos', { params: { limit: 1000 } })
+      .then(res => {
+        setGrupos(res.data.data || []);
+      })
+      .catch(() => {
+        toast.error('Erro ao carregar grupos');
+        setGrupos([]);
+      });
   }, []);
 
-  useEffect(() => {
-    if (!form.grupo_id) {
+  /* =========================
+     Load Subgrupos (quando grupo muda)
+  ========================= */
+useEffect(() => {
+  if (!form.grupo_id) {
+    setSubgrupos([]);
+    return;
+  }
+
+  api
+    .get('/subgrupos', {
+      params: { grupo_id: Number(form.grupo_id) },
+    })
+    .then(res => {
+      // 🔥 backend retorna ARRAY DIRETO
+      setSubgrupos(Array.isArray(res.data) ? res.data : []);
+    })
+    .catch(() => {
       setSubgrupos([]);
-      setForm(prev => ({ ...prev, subgrupo_id: '' }));
-      return;
-    }
+    });
+}, [form.grupo_id]);
 
-    api
-      .get('/subgrupos', { params: { grupo_id: form.grupo_id } })
-      .then(res => setSubgrupos(res.data));
-  }, [form.grupo_id]);
 
+  /* =========================
+     Handlers
+  ========================= */
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) {
     const { name, value } = e.target;
-    setForm(prev => ({ ...prev, [name]: value }));
+
+    setForm(prev => ({
+      ...prev,
+      [name]: value,
+      ...(name === 'grupo_id' ? { subgrupo_id: '' } : {}), // 🔥 zera subgrupo
+    }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -117,8 +144,8 @@ export default function ProdutoCreate() {
         nome: form.nome,
         descricao: form.descricao,
         unidade: form.unidade,
-        grupo_id: form.grupo_id || null,
-        subgrupo_id: form.subgrupo_id || null,
+        grupo_id: form.grupo_id ? Number(form.grupo_id) : null,
+        subgrupo_id: form.subgrupo_id ? Number(form.subgrupo_id) : null,
         preco_referencia: parseDecimalBR(form.preco_referencia),
         custo_medio: parseDecimalBR(form.custo_medio),
         ult_custo: parseDecimalBR(form.ult_custo),
@@ -134,6 +161,9 @@ export default function ProdutoCreate() {
     }
   }
 
+  /* =========================
+     Render
+  ========================= */
   return (
     <div style={layoutStyles.page}>
       <div style={layoutStyles.header}>
@@ -199,11 +229,11 @@ export default function ProdutoCreate() {
                   name="subgrupo_id"
                   value={form.subgrupo_id}
                   onChange={handleChange}
+                  disabled={!form.grupo_id}
                   style={{
                     ...formStyles.select,
                     opacity: form.grupo_id ? 1 : 0.6,
                   }}
-                  disabled={!form.grupo_id}
                 >
                   <option value="">Selecione</option>
                   {subgrupos.map(sg => (
@@ -222,35 +252,29 @@ export default function ProdutoCreate() {
             <div style={dividerStyle} />
 
             <div style={formStyles.row}>
-              <div style={formStyles.field}>
-                <label style={formStyles.label}>Preço de Referência</label>
-                <input
-                  name="preco_referencia"
-                  value={form.preco_referencia}
-                  onChange={handleChange}
-                  style={{ ...formStyles.input, textAlign: 'right' }}
-                />
-              </div>
+              <input
+                name="preco_referencia"
+                value={form.preco_referencia}
+                onChange={handleChange}
+                style={formStyles.input}
+                placeholder="Preço de Referência"
+              />
 
-              <div style={formStyles.field}>
-                <label style={formStyles.label}>Custo Médio</label>
-                <input
-                  name="custo_medio"
-                  value={form.custo_medio}
-                  onChange={handleChange}
-                  style={{ ...formStyles.input, textAlign: 'right' }}
-                />
-              </div>
+              <input
+                name="custo_medio"
+                value={form.custo_medio}
+                onChange={handleChange}
+                style={formStyles.input}
+                placeholder="Custo Médio"
+              />
 
-              <div style={formStyles.field}>
-                <label style={formStyles.label}>Último Custo</label>
-                <input
-                  name="ult_custo"
-                  value={form.ult_custo}
-                  onChange={handleChange}
-                  style={{ ...formStyles.input, textAlign: 'right' }}
-                />
-              </div>
+              <input
+                name="ult_custo"
+                value={form.ult_custo}
+                onChange={handleChange}
+                style={formStyles.input}
+                placeholder="Último Custo"
+              />
             </div>
           </div>
 
@@ -272,6 +296,7 @@ export default function ProdutoCreate() {
               Cancelar
             </button>
           </div>
+
         </form>
       </div>
     </div>

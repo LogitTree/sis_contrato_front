@@ -4,8 +4,7 @@ import {
   useEffect,
   useState,
 } from 'react';
-
-import type { ReactNode } from "react"
+import type { ReactNode } from "react" 
 
 import api, { setAuthToken } from '../api/api';
 

@@ -12,6 +12,7 @@ import { formStyles } from '../../styles/form';
 import { FiEdit, FiTrash2, FiList } from 'react-icons/fi';
 
 import { formatarDataBR } from '../../utils/masks';
+import { toast } from 'react-toastify';
 
 
 
@@ -45,6 +46,32 @@ export default function ContratosList() {
   useEffect(() => {
     carregarContratos(1);
   }, []);
+  
+  async function excluirContrato(contratoId: number) {
+    const confirmar = window.confirm(
+      'Tem certeza que deseja excluir este contrato? Essa ação não poderá ser desfeita.'
+    );
+
+    if (!confirmar) return;
+
+    try {
+      await api.delete(`/contratos/${contratoId}`);
+      toast.success('Contrato excluído com sucesso');
+
+      // 🔴 força reload consistente
+      carregarContratos(1);
+    } catch (error: any) {
+      console.error(error);
+
+      if (error?.response?.status === 409) {
+        toast.warning(
+          'Não é possível excluir este contrato pois ele possui itens vinculados.'
+        );
+      } else {
+        toast.error('Erro ao excluir contrato');
+      }
+    }
+  }
 
 
   /* ===== CONTRATOS FILTRADOS ===== */
@@ -199,9 +226,8 @@ export default function ContratosList() {
                   <button
                     style={{ ...buttonStyles.icon, color: '#dc2626' }}
                     title="Excluir"
-                    onClick={() =>
-                      console.log('Excluir contrato', c.id)
-                    }
+                    onClick={() => excluirContrato(c.id)}
+
                   >
                     <FiTrash2 size={18} />
                   </button>
