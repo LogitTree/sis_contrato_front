@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-import { layoutStyles } from '../../styles/layout';
-import { buttonStyles } from '../../styles/buttons';
-import { formStyles } from '../../styles/form';
-import api from '../../api/api';
-import { toast } from 'react-toastify';
-import { parseDecimalBR } from '../../utils/number';
+import { layoutStyles } from "../../styles/layout";
+import { buttonStyles } from "../../styles/buttons";
+import { formStyles } from "../../styles/form";
+import api from "../../api/api";
+
+import { toast } from "react-toastify";
 
 /* =========================
    Types
@@ -29,16 +29,40 @@ type ProdutoForm = {
   grupo_id: string;
   subgrupo_id: string;
 
+  // guarda DIGITOS (centavos) como string: "641" => R$ 6,41
   preco_referencia: string;
   custo_medio: string;
   ult_custo: string;
 
-  status: 'ATIVO' | 'INATIVO';
+  estoque_min: string;
+  cod_barra: string;
+
+  status: "ATIVO" | "INATIVO";
 };
 
 /* =========================
-   Component
+   Money helpers (mask)
 ========================= */
+function cleanMoneyDigits(value: string) {
+  return (value || "").replace(/\D/g, "");
+}
+
+function moneyDigitsToBRL(digits: string) {
+  const d = cleanMoneyDigits(digits);
+  if (!d) return "";
+  const cents = Number(d);
+  return (cents / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+function digitsToReaisNumber(digits: string) {
+  const d = cleanMoneyDigits(digits);
+  if (!d) return 0;
+  return Number(d) / 100;
+}
+
 export default function ProdutoCreate() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -47,38 +71,51 @@ export default function ProdutoCreate() {
   const [subgrupos, setSubgrupos] = useState<Subgrupo[]>([]);
 
   const [form, setForm] = useState<ProdutoForm>({
-    nome: '',
-    descricao: '',
-    unidade: '',
-    grupo_id: '',
-    subgrupo_id: '',
-    preco_referencia: '',
-    custo_medio: '',
-    ult_custo: '',
-    status: 'ATIVO',
+    nome: "",
+    descricao: "",
+    unidade: "",
+    grupo_id: "",
+    subgrupo_id: "",
+    preco_referencia: "",
+    custo_medio: "",
+    ult_custo: "",
+    estoque_min: "",
+    cod_barra: "",
+    status: "ATIVO",
   });
 
   /* =========================
-     Styles
+     Styles (igual Edit)
   ========================= */
   const sectionStyle = {
-    border: '1px solid #e5e7eb',
+    border: "1px solid #e5e7eb",
     borderRadius: 8,
     padding: 20,
     marginBottom: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
+  };
+
+  const sectionStyleStatus = {
+    display: "flex",
+    alignItems: "end",
+    gap: "10px",
+    border: "1px solid #e5e7eb",
+    borderRadius: 8,
+    padding: 20,
+    marginBottom: 16,
+    backgroundColor: "#ffffff",
   };
 
   const sectionTitleStyle = {
     fontSize: 16,
     fontWeight: 600,
     marginBottom: 12,
-    color: '#111827',
+    color: "#111827",
   };
 
   const dividerStyle = {
     height: 1,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: "#e5e7eb",
     marginBottom: 20,
   };
 
@@ -87,12 +124,12 @@ export default function ProdutoCreate() {
   ========================= */
   useEffect(() => {
     api
-      .get('/grupos', { params: { limit: 1000 } })
-      .then(res => {
+      .get("/grupos", { params: { limit: 1000 } })
+      .then((res) => {
         setGrupos(res.data.data || []);
       })
       .catch(() => {
-        toast.error('Erro ao carregar grupos');
+        toast.error("Erro ao carregar grupos");
         setGrupos([]);
       });
   }, []);
@@ -100,38 +137,46 @@ export default function ProdutoCreate() {
   /* =========================
      Load Subgrupos (quando grupo muda)
   ========================= */
-useEffect(() => {
-  if (!form.grupo_id) {
-    setSubgrupos([]);
-    return;
-  }
-
-  api
-    .get('/subgrupos', {
-      params: { grupo_id: Number(form.grupo_id) },
-    })
-    .then(res => {
-      // 🔥 backend retorna ARRAY DIRETO
-      setSubgrupos(Array.isArray(res.data) ? res.data : []);
-    })
-    .catch(() => {
+  useEffect(() => {
+    if (!form.grupo_id) {
       setSubgrupos([]);
-    });
-}, [form.grupo_id]);
+      return;
+    }
 
+    api
+      .get("/subgrupos", {
+        params: { grupo_id: Number(form.grupo_id) },
+      })
+      .then((res) => {
+        setSubgrupos(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch(() => {
+        setSubgrupos([]);
+      });
+  }, [form.grupo_id]);
 
   /* =========================
      Handlers
   ========================= */
+  const moneyFields = new Set(["preco_referencia", "custo_medio", "ult_custo"]);
+
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) {
     const { name, value } = e.target;
 
-    setForm(prev => ({
+    // money: guarda só dígitos
+    if (moneyFields.has(name)) {
+      const digits = cleanMoneyDigits(value);
+      setForm((prev) => ({ ...prev, [name]: digits }));
+      return;
+    }
+
+    // normal
+    setForm((prev) => ({
       ...prev,
       [name]: value,
-      ...(name === 'grupo_id' ? { subgrupo_id: '' } : {}), // 🔥 zera subgrupo
+      ...(name === "grupo_id" ? { subgrupo_id: "" } : {}),
     }));
   }
 
@@ -140,22 +185,28 @@ useEffect(() => {
     setLoading(true);
 
     try {
-      await api.post('/produtos', {
+      await api.post("/produtos", {
         nome: form.nome,
         descricao: form.descricao,
         unidade: form.unidade,
         grupo_id: form.grupo_id ? Number(form.grupo_id) : null,
         subgrupo_id: form.subgrupo_id ? Number(form.subgrupo_id) : null,
-        preco_referencia: parseDecimalBR(form.preco_referencia),
-        custo_medio: parseDecimalBR(form.custo_medio),
-        ult_custo: parseDecimalBR(form.ult_custo),
-        ativo: form.status === 'ATIVO',
+
+        // DECIMAL(10,2) => enviar em reais
+        preco_referencia: digitsToReaisNumber(form.preco_referencia),
+        custo_medio: digitsToReaisNumber(form.custo_medio),
+        ult_custo: digitsToReaisNumber(form.ult_custo),
+
+        cod_barra: form.cod_barra || null,
+        estoque_min: form.estoque_min ? Number(form.estoque_min) : 0,
+
+        ativo: form.status === "ATIVO",
       });
 
-      toast.success('Produto cadastrado com sucesso');
-      navigate('/produtos');
+      toast.success("Produto cadastrado com sucesso");
+      navigate("/produtos");
     } catch {
-      toast.error('Erro ao salvar produto');
+      toast.error("Erro ao salvar produto");
     } finally {
       setLoading(false);
     }
@@ -172,7 +223,6 @@ useEffect(() => {
 
       <div style={layoutStyles.card}>
         <form onSubmit={handleSubmit} style={formStyles.form}>
-
           {/* ===== Dados do Produto ===== */}
           <div style={sectionStyle}>
             <div style={sectionTitleStyle}>Dados do Produto</div>
@@ -198,6 +248,16 @@ useEffect(() => {
                 style={formStyles.input}
               />
             </div>
+
+            <div style={formStyles.field}>
+              <label style={formStyles.label}>Unidade</label>
+              <input
+                name="unidade"
+                value={form.unidade}
+                onChange={handleChange}
+                style={formStyles.input}
+              />
+            </div>
           </div>
 
           {/* ===== Classificação ===== */}
@@ -215,7 +275,7 @@ useEffect(() => {
                   style={formStyles.select}
                 >
                   <option value="">Selecione</option>
-                  {grupos.map(g => (
+                  {grupos.map((g) => (
                     <option key={g.id} value={g.id}>
                       {g.nome}
                     </option>
@@ -236,7 +296,7 @@ useEffect(() => {
                   }}
                 >
                   <option value="">Selecione</option>
-                  {subgrupos.map(sg => (
+                  {subgrupos.map((sg) => (
                     <option key={sg.id} value={sg.id}>
                       {sg.nome}
                     </option>
@@ -252,28 +312,75 @@ useEffect(() => {
             <div style={dividerStyle} />
 
             <div style={formStyles.row}>
-              <input
-                name="preco_referencia"
-                value={form.preco_referencia}
-                onChange={handleChange}
-                style={formStyles.input}
-                placeholder="Preço de Referência"
-              />
+              <div style={formStyles.field}>
+                <label style={formStyles.label}>Preço de Referência</label>
+                <input
+                  name="preco_referencia"
+                  inputMode="numeric"
+                  value={moneyDigitsToBRL(form.preco_referencia)}
+                  onChange={handleChange}
+                  style={{ ...formStyles.input, textAlign: "right" }}
+                />
+              </div>
 
-              <input
-                name="custo_medio"
-                value={form.custo_medio}
-                onChange={handleChange}
-                style={formStyles.input}
-                placeholder="Custo Médio"
-              />
+              <div style={formStyles.field}>
+                <label style={formStyles.label}>Custo Médio</label>
+                <input
+                  name="custo_medio"
+                  inputMode="numeric"
+                  value={moneyDigitsToBRL(form.custo_medio)}
+                  onChange={handleChange}
+                  style={{ ...formStyles.input, textAlign: "right" }}
+                />
+              </div>
 
+              <div style={formStyles.field}>
+                <label style={formStyles.label}>Último Custo</label>
+                <input
+                  name="ult_custo"
+                  inputMode="numeric"
+                  value={moneyDigitsToBRL(form.ult_custo)}
+                  onChange={handleChange}
+                  style={{ ...formStyles.input, textAlign: "right" }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ===== Status + extras ===== */}
+          <div style={sectionStyleStatus}>
+            <div>
+              <div style={sectionTitleStyle}>Status</div>
+
+              <select
+                name="status"
+                value={form.status}
+                onChange={handleChange}
+                style={formStyles.select}
+              >
+                <option value="ATIVO">Ativo</option>
+                <option value="INATIVO">Inativo</option>
+              </select>
+            </div>
+
+            <div style={formStyles.field}>
+              <label style={formStyles.label}>Estoque mínimo</label>
               <input
-                name="ult_custo"
-                value={form.ult_custo}
+                name="estoque_min"
+                inputMode="numeric"
+                value={form.estoque_min}
                 onChange={handleChange}
                 style={formStyles.input}
-                placeholder="Último Custo"
+              />
+            </div>
+
+            <div style={formStyles.field}>
+              <label style={formStyles.label}>Código de barras</label>
+              <input
+                name="cod_barra"
+                value={form.cod_barra}
+                onChange={handleChange}
+                style={formStyles.input}
               />
             </div>
           </div>
@@ -285,18 +392,17 @@ useEffect(() => {
               style={buttonStyles.primary}
               disabled={loading}
             >
-              {loading ? 'Salvando...' : 'Salvar'}
+              {loading ? "Salvando..." : "Salvar"}
             </button>
 
             <button
               type="button"
               style={buttonStyles.link}
-              onClick={() => navigate('/produtos')}
+              onClick={() => navigate("/produtos")}
             >
               Cancelar
             </button>
           </div>
-
         </form>
       </div>
     </div>

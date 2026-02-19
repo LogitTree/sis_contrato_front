@@ -1,13 +1,12 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 
-import { layoutStyles } from '../../styles/layout';
-import { buttonStyles } from '../../styles/buttons';
-import { formStyles } from '../../styles/form';
-import api from '../../api/api';
-// import { parseDecimalBR } from '../../utils/number';
+import { layoutStyles } from "../../styles/layout";
+import { buttonStyles } from "../../styles/buttons";
+import { formStyles } from "../../styles/form";
+import api from "../../api/api";
 
-import { toast } from 'react-toastify';
+import { toast } from "react-toastify";
 
 /* =========================
    Types
@@ -30,12 +29,75 @@ type ProdutoForm = {
   grupo_id: string;
   subgrupo_id: string;
 
+  // ⚠️ agora guardamos DIGITOS (centavos) como string
+  // ex: "641" => R$ 6,41
   preco_referencia: string;
   custo_medio: string;
   ult_custo: string;
 
   ativo: boolean;
 };
+
+/* =========================
+   Money helpers (mask)
+========================= */
+function cleanMoneyDigits(value: string) {
+  return (value || "").replace(/\D/g, "");
+}
+
+function moneyDigitsToBRL(digits: string) {
+  const d = cleanMoneyDigits(digits);
+  if (!d) return "";
+  const cents = Number(d);
+  return (cents / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+// "64000" -> "640.00" (SEM milhar, SEM vírgula)
+function digitsToDecimalString(digits: string) {
+  const d = cleanMoneyDigits(digits);
+  if (!d) return "0.00";
+
+  const padded = d.padStart(3, "0"); // garante pelo menos 3 dígitos
+  const reais = padded.slice(0, -2);
+  const cents = padded.slice(-2);
+
+  return `${Number(reais)}.${cents}`;
+}
+
+// converte "641" -> 6.41 (number)
+function digitsToReaisNumber(digits: string) {
+  const onlyDigits = (digits || "").replace(/\D/g, "");
+  if (!onlyDigits) return 0;
+  return Number(onlyDigits) / 100;
+}
+
+// normaliza valor que vem do backend pro formato "dígitos"
+function apiValueToDigits(value: any) {
+  if (value === null || value === undefined || value === "") return "";
+
+  // se vier número 6.41 ou string "6.41" / "6,41"
+  const str = String(value).trim();
+
+  // remove "R$" e espaços
+  const noCurrency = str.replace(/[R$\s]/g, "");
+
+  // troca milhar e decimal pra converter com segurança
+  // "1.234,56" -> "1234.56"
+  const normalized = noCurrency.replace(/\./g, "").replace(",", ".");
+
+  const n = Number(normalized);
+  if (Number.isNaN(n)) {
+    // fallback: pega só dígitos
+    return str.replace(/\D/g, "");
+  }
+
+  // transforma em centavos (dígitos)
+  const cents = Math.round(n * 100);
+  return String(cents);
+}
 
 /* =========================
    Component
@@ -51,14 +113,14 @@ export default function ProdutoEdit() {
   const [subgrupos, setSubgrupos] = useState<Subgrupo[]>([]);
 
   const [form, setForm] = useState<ProdutoForm>({
-    nome: '',
-    descricao: '',
-    unidade: '',
-    grupo_id: '',
-    subgrupo_id: '',
-    preco_referencia: '',
-    custo_medio: '',
-    ult_custo: '',
+    nome: "",
+    descricao: "",
+    unidade: "",
+    grupo_id: "",
+    subgrupo_id: "",
+    preco_referencia: "",
+    custo_medio: "",
+    ult_custo: "",
     ativo: true,
   });
 
@@ -66,23 +128,34 @@ export default function ProdutoEdit() {
      Styles (igual Create)
   ========================= */
   const sectionStyle = {
-    border: '1px solid #e5e7eb',
+    border: "1px solid #e5e7eb",
     borderRadius: 8,
     padding: 20,
     marginBottom: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
+  };
+
+  const sectionStyleStatus = {
+    display: "flex",
+    alignItems: "end",
+    gap: "10px",
+    border: "1px solid #e5e7eb",
+    borderRadius: 8,
+    padding: 20,
+    marginBottom: 16,
+    backgroundColor: "#ffffff",
   };
 
   const sectionTitleStyle = {
     fontSize: 16,
     fontWeight: 600,
     marginBottom: 12,
-    color: '#111827',
+    color: "#111827",
   };
 
   const dividerStyle = {
     height: 1,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: "#e5e7eb",
     marginBottom: 20,
   };
 
@@ -92,13 +165,13 @@ export default function ProdutoEdit() {
   useEffect(() => {
     async function carregarGrupos() {
       try {
-        const res = await api.get('/grupos', {
+        const res = await api.get("/grupos", {
           params: { limit: 1000 },
         });
 
         setGrupos(res.data.data || []);
       } catch {
-        toast.error('Erro ao carregar grupos');
+        toast.error("Erro ao carregar grupos");
         setGrupos([]);
       }
     }
@@ -115,36 +188,25 @@ export default function ProdutoEdit() {
         const response = await api.get(`/produtos/${id}`);
         const data = response.data;
 
-        setForm({
-          nome: data.nome ?? '',
-          descricao: data.descricao ?? '',
-          unidade: data.unidade ?? '',
-          grupo_id: data.grupo_id ? String(data.grupo_id) : '',
-          subgrupo_id: data.subgrupo_id ? String(data.subgrupo_id) : '',
-          preco_referencia: String(data.preco_referencia ?? ''),
-          custo_medio: String(data.custo_medio ?? ''),
-          ult_custo: String(data.ult_custo ?? ''),
-          ativo: Boolean(data.ativo),
-        });
-
-        const grupoId = data.grupo_id ? String(data.grupo_id) : '';
+        const grupoId = data.grupo_id ? String(data.grupo_id) : "";
 
         setForm({
-          nome: data.nome ?? '',
-          descricao: data.descricao ?? '',
-          unidade: data.unidade ?? '',
+          nome: data.nome ?? "",
+          descricao: data.descricao ?? "",
+          unidade: data.unidade ?? "",
           grupo_id: grupoId,
-          subgrupo_id: data.subgrupo_id ? String(data.subgrupo_id) : '',
-          preco_referencia: String(data.preco_referencia ?? ''),
-          custo_medio: String(data.custo_medio ?? ''),
-          ult_custo: String(data.ult_custo ?? ''),
+          subgrupo_id: data.subgrupo_id ? String(data.subgrupo_id) : "",
+          // normaliza pra dígitos (centavos)
+          preco_referencia: apiValueToDigits(data.preco_referencia),
+          custo_medio: apiValueToDigits(data.custo_medio),
+          ult_custo: apiValueToDigits(data.ult_custo),
           ativo: Boolean(data.ativo),
         });
 
-        // ⬇️ só carrega subgrupos DEPOIS de normalizar
+        // ⬇️ carrega subgrupos do grupo atual
         if (grupoId) {
           try {
-            const sg = await api.get('/subgrupos', {
+            const sg = await api.get("/subgrupos", {
               params: { grupo_id: grupoId },
             });
 
@@ -153,11 +215,10 @@ export default function ProdutoEdit() {
             setSubgrupos([]);
           }
         }
-
       } catch (error) {
         console.error(error);
-        toast.error('Erro ao carregar produto');
-        navigate('/produtos');
+        toast.error("Erro ao carregar produto");
+        navigate("/produtos");
       } finally {
         setLoadingData(false);
       }
@@ -176,11 +237,10 @@ export default function ProdutoEdit() {
     }
 
     api
-      .get('/subgrupos', {
+      .get("/subgrupos", {
         params: { grupo_id: Number(form.grupo_id) },
       })
-      .then(res => {
-        // 🔥 backend retorna ARRAY DIRETO
+      .then((res) => {
         setSubgrupos(Array.isArray(res.data) ? res.data : []);
       })
       .catch(() => {
@@ -191,11 +251,47 @@ export default function ProdutoEdit() {
   /* =========================
      Handlers
   ========================= */
+  const moneyFields = new Set(["preco_referencia", "custo_medio", "ult_custo"]);
+
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) {
     const { name, value } = e.target;
-    setForm(prev => ({ ...prev, [name]: value }));
+
+    if (moneyFields.has(name)) {
+
+      const digits = cleanMoneyDigits(value);
+      setForm((prev) => ({ ...prev, [name]: digits }));
+      return;
+    }
+
+    setForm((prev) => ({ ...prev, [name]: value }));
+  }
+  function apiValueToDigits(value: any) {
+    if (value === null || value === undefined || value === "") return "";
+
+    const raw = String(value).trim().replace(/[R$\s]/g, "");
+
+    let normalized = raw;
+
+    const hasDot = normalized.includes(".");
+    const hasComma = normalized.includes(",");
+
+    if (hasDot && hasComma) {
+      // pt-BR com milhar e decimal: "1.234,56" -> "1234.56"
+      normalized = normalized.replace(/\./g, "").replace(",", ".");
+    } else if (hasComma && !hasDot) {
+      // pt-BR decimal: "640,00" -> "640.00"
+      normalized = normalized.replace(",", ".");
+    } else {
+      // só ponto ou só número: assume ponto como decimal ("640.00") e não remove.
+      // "64000" continua "64000"
+    }
+
+    const n = Number(normalized);
+    if (Number.isNaN(n)) return "";
+
+    return String(Math.round(n * 100)); // "640.00" -> "64000"
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -209,18 +305,21 @@ export default function ProdutoEdit() {
         unidade: form.unidade,
         grupo_id: form.grupo_id || null,
         subgrupo_id: form.subgrupo_id || null,
-        preco_referencia: (form.preco_referencia),
-        custo_medio: (form.custo_medio),
-        ult_custo: (form.ult_custo),
+
+        // ✅ ENVIA EM REAIS (decimal), não em dígitos
+        // ✅ envia "640.00"
+        preco_referencia: digitsToReaisNumber(form.preco_referencia),
+        custo_medio: digitsToReaisNumber(form.custo_medio),
+        ult_custo: digitsToReaisNumber(form.ult_custo),
         ativo: form.ativo,
       };
 
       await api.put(`/produtos/${id}`, payload);
 
-      toast.success('Produto atualizado com sucesso');
-      navigate('/produtos');
+      toast.success("Produto atualizado com sucesso");
+      navigate("/produtos");
     } catch {
-      toast.error('Erro ao atualizar produto');
+      toast.error("Erro ao atualizar produto");
     } finally {
       setLoading(false);
     }
@@ -248,7 +347,6 @@ export default function ProdutoEdit() {
 
       <div style={layoutStyles.card}>
         <form onSubmit={handleSubmit} style={formStyles.form}>
-
           {/* ===== Dados do Produto ===== */}
           <div style={sectionStyle}>
             <div style={sectionTitleStyle}>Dados do Produto</div>
@@ -291,7 +389,7 @@ export default function ProdutoEdit() {
                   style={formStyles.select}
                 >
                   <option value="">Selecione</option>
-                  {grupos.map(g => (
+                  {grupos.map((g) => (
                     <option key={g.id} value={g.id}>
                       {g.nome}
                     </option>
@@ -312,7 +410,7 @@ export default function ProdutoEdit() {
                   }}
                 >
                   <option value="">Selecione</option>
-                  {subgrupos.map(sg => (
+                  {subgrupos.map((sg) => (
                     <option key={sg.id} value={sg.id}>
                       {sg.nome}
                     </option>
@@ -332,9 +430,10 @@ export default function ProdutoEdit() {
                 <label style={formStyles.label}>Preço de Referência</label>
                 <input
                   name="preco_referencia"
-                  value={form.preco_referencia}
+                  inputMode="numeric"
+                  value={moneyDigitsToBRL(form.preco_referencia)}
                   onChange={handleChange}
-                  style={{ ...formStyles.input, textAlign: 'right' }}
+                  style={{ ...formStyles.input, textAlign: "right" }}
                 />
               </div>
 
@@ -342,9 +441,10 @@ export default function ProdutoEdit() {
                 <label style={formStyles.label}>Custo Médio</label>
                 <input
                   name="custo_medio"
-                  value={form.custo_medio}
+                  inputMode="numeric"
+                  value={moneyDigitsToBRL(form.custo_medio)}
                   onChange={handleChange}
-                  style={{ ...formStyles.input, textAlign: 'right' }}
+                  style={{ ...formStyles.input, textAlign: "right" }}
                 />
               </div>
 
@@ -352,32 +452,54 @@ export default function ProdutoEdit() {
                 <label style={formStyles.label}>Último Custo</label>
                 <input
                   name="ult_custo"
-                  value={form.ult_custo}
+                  inputMode="numeric"
+                  value={moneyDigitsToBRL(form.ult_custo)}
                   onChange={handleChange}
-                  style={{ ...formStyles.input, textAlign: 'right' }}
+                  style={{ ...formStyles.input, textAlign: "right" }}
                 />
               </div>
             </div>
           </div>
 
           {/* ===== Status ===== */}
-          <div style={sectionStyle}>
-            <div style={sectionTitleStyle}>Status</div>
-            <div style={dividerStyle} />
+          <div style={sectionStyleStatus}>
+            <div>
+              <div style={sectionTitleStyle}>Status</div>
 
-            <select
-              value={form.ativo ? 'ATIVO' : 'INATIVO'}
-              onChange={e =>
-                setForm(prev => ({
-                  ...prev,
-                  ativo: e.target.value === 'ATIVO',
-                }))
-              }
-              style={formStyles.select}
-            >
-              <option value="ATIVO">Ativo</option>
-              <option value="INATIVO">Inativo</option>
-            </select>
+              <select
+                value={form.ativo ? "ATIVO" : "INATIVO"}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    ativo: e.target.value === "ATIVO",
+                  }))
+                }
+                style={formStyles.select}
+              >
+                <option value="ATIVO">Ativo</option>
+                <option value="INATIVO">Inativo</option>
+              </select>
+            </div>
+
+            <div style={formStyles.field}>
+              <label style={formStyles.label}>Estoque minimo</label>
+              <input
+                name="estoque_min"
+                value={form.descricao}
+                onChange={handleChange}
+                style={formStyles.input}
+              />
+            </div>
+
+            <div style={formStyles.field}>
+              <label style={formStyles.label}>Código de barras</label>
+              <input
+                name="cod_barra"
+                value={form.descricao}
+                onChange={handleChange}
+                style={formStyles.input}
+              />
+            </div>
           </div>
 
           {/* ===== Actions ===== */}
@@ -387,18 +509,17 @@ export default function ProdutoEdit() {
               style={buttonStyles.primary}
               disabled={loading}
             >
-              {loading ? 'Salvando...' : 'Salvar'}
+              {loading ? "Salvando..." : "Salvar"}
             </button>
 
             <button
               type="button"
               style={buttonStyles.link}
-              onClick={() => navigate('/produtos')}
+              onClick={() => navigate("/produtos")}
             >
               Cancelar
             </button>
           </div>
-
         </form>
       </div>
     </div>
