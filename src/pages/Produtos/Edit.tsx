@@ -55,48 +55,12 @@ function moneyDigitsToBRL(digits: string) {
   });
 }
 
-// "64000" -> "640.00" (SEM milhar, SEM vírgula)
-function digitsToDecimalString(digits: string) {
-  const d = cleanMoneyDigits(digits);
-  if (!d) return "0.00";
-
-  const padded = d.padStart(3, "0"); // garante pelo menos 3 dígitos
-  const reais = padded.slice(0, -2);
-  const cents = padded.slice(-2);
-
-  return `${Number(reais)}.${cents}`;
-}
 
 // converte "641" -> 6.41 (number)
 function digitsToReaisNumber(digits: string) {
   const onlyDigits = (digits || "").replace(/\D/g, "");
   if (!onlyDigits) return 0;
   return Number(onlyDigits) / 100;
-}
-
-// normaliza valor que vem do backend pro formato "dígitos"
-function apiValueToDigits(value: any) {
-  if (value === null || value === undefined || value === "") return "";
-
-  // se vier número 6.41 ou string "6.41" / "6,41"
-  const str = String(value).trim();
-
-  // remove "R$" e espaços
-  const noCurrency = str.replace(/[R$\s]/g, "");
-
-  // troca milhar e decimal pra converter com segurança
-  // "1.234,56" -> "1234.56"
-  const normalized = noCurrency.replace(/\./g, "").replace(",", ".");
-
-  const n = Number(normalized);
-  if (Number.isNaN(n)) {
-    // fallback: pega só dígitos
-    return str.replace(/\D/g, "");
-  }
-
-  // transforma em centavos (dígitos)
-  const cents = Math.round(n * 100);
-  return String(cents);
 }
 
 /* =========================
