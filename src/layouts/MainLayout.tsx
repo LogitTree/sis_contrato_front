@@ -6,20 +6,17 @@ export default function MainLayout() {
     <div
       style={{
         display: 'flex',
-        width: '100vw',   // 🔥 ocupa toda a largura da tela
-        height: '100vh',  // 🔥 ocupa toda a altura da tela
-        overflow: 'hidden',
+        width: '100vw',
+        height: '100vh',
       }}
     >
       <Sidebar />
 
       <main
         style={{
-          flex: 1,            // 🔥 ocupa todo o espaço restante
-          width: '100%',
-          height: '100%',
+          flex: 1,
           padding: '20px',
-          overflow: 'hidden', // 🔥 evita scroll duplo
+          overflowY: 'auto',   // ✅ AGORA TEM SCROLL
           boxSizing: 'border-box',
         }}
       >

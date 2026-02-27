@@ -58,8 +58,9 @@ export default function OrgaosList() {
         },
       });
 
-      setOrgaos(res.data.data);
-      setTotalPages(res.data.meta.totalPages);
+      // mesmo padrão que você já está usando
+      setOrgaos(res.data.data ?? []);
+      setTotalPages(res.data.meta?.totalPages ?? 1);
     } catch (error) {
       console.error(error);
       toast.error("Erro ao carregar órgãos");
@@ -70,6 +71,7 @@ export default function OrgaosList() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, sort, dir, filters.nome, filters.esfera]);
 
   function handleSort(field: typeof sort) {
@@ -104,8 +106,6 @@ export default function OrgaosList() {
     setShowModal(true);
   }
 
-  if (loading) return <p style={{ padding: 20 }}>Carregando...</p>;
-
   return (
     <div style={layoutStyles.page}>
       {/* HEADER */}
@@ -117,16 +117,27 @@ export default function OrgaosList() {
           </div>
         </div>
 
-        <button
-          style={buttonStyles.primary}
-          onClick={() => navigate("/orgaos/novo")}
-        >
+        <button style={buttonStyles.primary} onClick={() => navigate("/orgaos/novo")}>
           + Novo Órgão
         </button>
       </div>
 
+      {/* CARD ÚNICO (igual empresas) */}
       <div style={layoutStyles.card}>
-        {/* 🔎 Filtros modernos */}
+        {/* Título interno + divisor (igual empresas) */}
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+          Lista de Órgãos
+        </div>
+
+        <div
+          style={{
+            height: 1,
+            background: "#eef2f7",
+            margin: "12px 0 10px",
+          }}
+        />
+
+        {/* 🔎 Filtros (padrão empresas) */}
         <div style={filterStyles.container}>
           <span style={filterStyles.title}>Filtro</span>
 
@@ -136,24 +147,31 @@ export default function OrgaosList() {
               style={filterStyles.input}
               {...fieldFocusHandlers}
               value={filters.nome}
-              onChange={(e) =>
-                setFilters({ ...filters, nome: e.target.value })
-              }
+              onChange={(e) => setFilters({ ...filters, nome: e.target.value })}
             />
 
             <select
               style={filterStyles.select}
               {...fieldFocusHandlers}
               value={filters.esfera}
-              onChange={(e) =>
-                setFilters({ ...filters, esfera: e.target.value })
-              }
+              onChange={(e) => setFilters({ ...filters, esfera: e.target.value })}
             >
               <option value="">Todas as esferas</option>
               <option value="MUNICIPAL">Municipal</option>
               <option value="ESTADUAL">Estadual</option>
               <option value="FEDERAL">Federal</option>
             </select>
+
+            <button
+              type="button"
+              style={buttonStyles.secondary}
+              onClick={() => {
+                setFilters({ nome: "", esfera: "" });
+                setPage(1);
+              }}
+            >
+              Limpar
+            </button>
           </div>
         </div>
 
@@ -161,19 +179,31 @@ export default function OrgaosList() {
         <table style={tableStyles.table}>
           <thead>
             <tr>
-              <th style={{ ...tableStyles.th, width: "5%", cursor: "pointer" }} onClick={() => handleSort("id")}>
+              <th
+                style={{ ...tableStyles.th, width: "5%", cursor: "pointer" }}
+                onClick={() => handleSort("id")}
+              >
                 ID {renderSortIcon("id")}
               </th>
 
-              <th style={{ ...tableStyles.th, width: "40%", cursor: "pointer" }} onClick={() => handleSort("nome")}>
+              <th
+                style={{ ...tableStyles.th, width: "40%", cursor: "pointer" }}
+                onClick={() => handleSort("nome")}
+              >
                 Nome {renderSortIcon("nome")}
               </th>
 
-              <th style={{ ...tableStyles.th, width: "20%", cursor: "pointer" }} onClick={() => handleSort("cnpj")}>
+              <th
+                style={{ ...tableStyles.th, width: "20%", cursor: "pointer" }}
+                onClick={() => handleSort("cnpj")}
+              >
                 CNPJ {renderSortIcon("cnpj")}
               </th>
 
-              <th style={{ ...tableStyles.th, width: "15%", cursor: "pointer" }} onClick={() => handleSort("esfera")}>
+              <th
+                style={{ ...tableStyles.th, width: "15%", cursor: "pointer" }}
+                onClick={() => handleSort("esfera")}
+              >
                 Esfera {renderSortIcon("esfera")}
               </th>
 
@@ -188,50 +218,64 @@ export default function OrgaosList() {
           </thead>
 
           <tbody>
-            {orgaos.map((o) => (
-              <tr key={o.id}>
-                <td style={tableStyles.td}>{o.id}</td>
-                <td style={tableStyles.td}>{o.nome}</td>
-                <td style={tableStyles.td}>{o.cnpj}</td>
-
-                <td style={tableStyles.td}>
-                  <span style={badgeStyles.base}>{o.esfera}</span>
-                </td>
-
-                <td style={{ ...tableStyles.td, textAlign: "center" }}>
-                  <button
-                    style={buttonStyles.link}
-                    onClick={() => openContratos(o.id)}
-                  >
-                    {o.total_contratos || 0}
-                  </button>
-                </td>
-
-                <td style={tableStyles.td}>
-                  <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-                    <button
-                      title="Editar"
-                      style={{ ...buttonStyles.icon, color: "#2563eb" }}
-                      onClick={() => navigate(`/orgaos/${o.id}/editar`)}
-                    >
-                      <FiEdit size={18} />
-                    </button>
-
-                    <button
-                      title="Excluir"
-                      style={{ ...buttonStyles.icon, color: "#dc2626" }}
-                      onClick={() => handleDelete(o.id)}
-                    >
-                      <FiTrash2 size={18} />
-                    </button>
-                  </div>
+            {loading && (
+              <tr>
+                <td colSpan={6} style={{ ...tableStyles.td, textAlign: "center", padding: 20 }}>
+                  Carregando...
                 </td>
               </tr>
-            ))}
+            )}
+
+            {!loading && orgaos.length === 0 && (
+              <tr>
+                <td colSpan={6} style={{ ...tableStyles.td, textAlign: "center", padding: 20 }}>
+                  Nenhum órgão encontrado.
+                </td>
+              </tr>
+            )}
+
+            {!loading &&
+              orgaos.map((o) => (
+                <tr key={o.id}>
+                  <td style={tableStyles.td}>{o.id}</td>
+                  <td style={tableStyles.td}>{o.nome}</td>
+                  <td style={tableStyles.td}>{o.cnpj}</td>
+
+                  <td style={tableStyles.td}>
+                    <span style={badgeStyles.base}>{o.esfera}</span>
+                  </td>
+
+                  <td style={{ ...tableStyles.td, textAlign: "center" }}>
+                    <button style={buttonStyles.link} onClick={() => openContratos(o.id)}>
+                      {o.total_contratos || 0}
+                    </button>
+                  </td>
+
+                  <td style={tableStyles.td}>
+                    <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                      <button
+                        title="Editar"
+                        style={{ ...buttonStyles.icon, color: "#2563eb" }}
+                        onClick={() => navigate(`/orgaos/${o.id}/editar`)}
+                      >
+                        <FiEdit size={18} />
+                      </button>
+
+                      <button
+                        title="Excluir"
+                        style={{ ...buttonStyles.icon, color: "#dc2626" }}
+                        onClick={() => handleDelete(o.id)}
+                      >
+                        <FiTrash2 size={18} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
 
-        {/* 🔢 Paginação padrão */}
+        {/* 🔢 Paginação (igual empresas) */}
         {orgaos.length > 0 && (
           <div
             style={{
@@ -267,10 +311,7 @@ export default function OrgaosList() {
 
       {/* Modal */}
       {showModal && orgaoSelecionado && (
-        <ModalContratosOrgao
-          orgaoId={orgaoSelecionado}
-          onClose={() => setShowModal(false)}
-        />
+        <ModalContratosOrgao orgaoId={orgaoSelecionado} onClose={() => setShowModal(false)} />
       )}
     </div>
   );
