@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   FiHome,
   FiFolder,
@@ -10,169 +10,163 @@ import {
   FiShoppingCart,
   FiChevronDown,
   FiChevronUp,
-} from 'react-icons/fi';
+} from "react-icons/fi";
 
-import { sidebarStyles } from '../styles/sidebar';
+import { sidebarStyles } from "../styles/sidebar";
 
-/* =========================
-   Hover reutilizável
-========================= */
-const hoverEffect = {
-  onMouseEnter: (e: React.MouseEvent<HTMLDivElement>) => {
-    e.currentTarget.style.background = '#1f2937';
-  },
-  onMouseLeave: (e: React.MouseEvent<HTMLDivElement>) => {
-    e.currentTarget.style.background = 'transparent';
-  },
-};
-
-/* =========================
-   Component
-========================= */
 export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const [openCadastro, setOpenCadastro] = useState(true);
 
   function isActive(path: string) {
-    return location.pathname.startsWith(path);
+    return location.pathname === path || location.pathname.startsWith(path + "/");
   }
+
+  const cadastrosActive = useMemo(
+    () =>
+      isActive("/empresas") ||
+      isActive("/orgaos") ||
+      isActive("/produtos") ||
+      isActive("/grupos") ||
+      isActive("/subgrupos"),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [location.pathname]
+  );
+
+  useEffect(() => {
+    if (cadastrosActive) setOpenCadastro(true);
+  }, [cadastrosActive]);
+
+  const onHover =
+    (active: boolean) => (e: React.MouseEvent<HTMLDivElement>) => {
+      if (active) return;
+      e.currentTarget.style.background = "rgba(255,255,255,0.06)";
+      e.currentTarget.style.transform = "translateX(2px)";
+    };
+
+  const onLeave =
+    (active: boolean) => (e: React.MouseEvent<HTMLDivElement>) => {
+      if (active) return;
+      e.currentTarget.style.background = "transparent";
+      e.currentTarget.style.transform = "translateX(0)";
+    };
 
   return (
     <aside style={sidebarStyles.container}>
-      {/* Logo */}
       <div style={sidebarStyles.logo}>SisContratos</div>
 
+      <div style={sidebarStyles.sectionLabel}>Visão geral</div>
       {/* Dashboard */}
-      <div
-        style={{
-          ...sidebarStyles.menuItem,
-          ...(isActive('/') ? sidebarStyles.activeItem : {}),
-        }}
-        {...hoverEffect}
-        onClick={() => navigate('/')}
-      >
-        <FiHome size={18} />
-        Dashboard
-      </div>
+      {(() => {
+        const active = isActive("/");
+        return (
+          <div
+            style={{
+              ...sidebarStyles.menuItem,
+              ...(active ? sidebarStyles.activeItem : {}),
+            }}
+            onMouseEnter={onHover(active)}
+            onMouseLeave={onLeave(active)}
+            onClick={() => navigate("/")}
+          >
+            <FiHome size={18} />
+            Dashboard
+          </div>
+        );
+      })()}
+
+      <div style={sidebarStyles.sectionLabel}>Gestão</div>
 
       {/* Cadastros */}
-      <div
-        style={{
-          ...sidebarStyles.menuItem,
-          ...(isActive('/empresas') ||
-            isActive('/orgaos') ||
-            isActive('/produtos')
-            ? sidebarStyles.activeItem
-            : {}),
-        }}
-        {...hoverEffect}
-        onClick={() => setOpenCadastro(!openCadastro)}
-      >
-        <FiFolder size={18} />
-        Cadastros
-        {openCadastro ? <FiChevronUp /> : <FiChevronDown />}
-      </div>
+      {(() => {
+        const active = cadastrosActive;
+        return (
+          <>
+            <div
+              style={{
+                ...sidebarStyles.menuItem,
+                ...(active ? sidebarStyles.activeItem : {}),
+              }}
+              onMouseEnter={onHover(active)}
+              onMouseLeave={onLeave(active)}
+              onClick={() => setOpenCadastro((v) => !v)}
+            >
+              <FiFolder size={18} />
+              <span style={{ flex: 1 }}>Cadastros</span>
+              {openCadastro ? <FiChevronUp /> : <FiChevronDown />}
+            </div>
 
-      {openCadastro && (
-        <div style={sidebarStyles.submenu}>
-          <div
-            style={{
-              ...sidebarStyles.submenuItem,
-              ...(isActive('/empresas')
-                ? sidebarStyles.activeSubItem
-                : {}),
-            }}
-            {...hoverEffect}
-            onClick={() => navigate('/empresas')}
-          >
-            <FiBriefcase size={16} />
-            Empresas
-          </div>
-
-          <div
-            style={{
-              ...sidebarStyles.submenuItem,
-              ...(isActive('/orgaos')
-                ? sidebarStyles.activeSubItem
-                : {}),
-            }}
-            {...hoverEffect}
-            onClick={() => navigate('/orgaos')}
-          >
-            <FiUsers size={16} />
-            Órgãos
-          </div>
-
-          <div
-            style={{
-              ...sidebarStyles.submenuItem,
-              ...(isActive('/produtos')
-                ? sidebarStyles.activeSubItem
-                : {}),
-            }}
-            {...hoverEffect}
-            onClick={() => navigate('/produtos')}
-          >
-            <FiBox size={16} />
-            Produtos
-          </div>
-
-          <div
-            style={{
-              ...sidebarStyles.submenuItem,
-              ...(isActive('/grupos')
-                ? sidebarStyles.activeSubItem
-                : {}),
-            }}
-            {...hoverEffect}
-            onClick={() => navigate('/grupos')}
-          >
-            <FiBox size={16} />
-            Grupo de produtos
-          </div>
-
-          <div
-            style={{
-              ...sidebarStyles.submenuItem,
-              ...(isActive('/subgrupos')
-                ? sidebarStyles.activeSubItem
-                : {}),
-            }}
-            {...hoverEffect}
-            onClick={() => navigate('/subgrupos')}
-          >
-            <FiBox size={16} />
-            Subgrupo de produtos
-          </div>
-        </div>
-      )}
+            {openCadastro && (
+              <div style={sidebarStyles.submenu}>
+                {[
+                  { path: "/empresas", label: "Empresas", icon: <FiBriefcase size={16} /> },
+                  { path: "/orgaos", label: "Órgãos", icon: <FiUsers size={16} /> },
+                  { path: "/produtos", label: "Produtos", icon: <FiBox size={16} /> },
+                  { path: "/grupos", label: "Grupo de produtos", icon: <FiBox size={16} /> },
+                  { path: "/subgrupos", label: "Subgrupo de produtos", icon: <FiBox size={16} /> },
+                ].map((it) => {
+                  const subActive = isActive(it.path);
+                  return (
+                    <div
+                      key={it.path}
+                      style={{
+                        ...sidebarStyles.submenuItem,
+                        ...(subActive ? sidebarStyles.activeSubItem : {}),
+                      }}
+                      onMouseEnter={onHover(subActive)}
+                      onMouseLeave={onLeave(subActive)}
+                      onClick={() => navigate(it.path)}
+                      title={it.label}
+                    >
+                      {it.icon}
+                      {it.label}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* Contratos */}
-      <div
-        style={{
-          ...sidebarStyles.menuItem,
-          ...(isActive('/contratos') ? sidebarStyles.activeItem : {}),
-        }}
-        {...hoverEffect}
-        onClick={() => navigate('/contratos')}
-      >
-        <FiFileText size={18} />
-        Contratos
-      </div>
+      {(() => {
+        const active = isActive("/contratos");
+        return (
+          <div
+            style={{
+              ...sidebarStyles.menuItem,
+              ...(active ? sidebarStyles.activeItem : {}),
+            }}
+            onMouseEnter={onHover(active)}
+            onMouseLeave={onLeave(active)}
+            onClick={() => navigate("/contratos")}
+          >
+            <FiFileText size={18} />
+            Contratos
+          </div>
+        );
+      })()}
 
       {/* Vendas */}
-      <div
-        style={{
-          ...sidebarStyles.menuItem,
-          ...(isActive('/pedidosvenda') ? sidebarStyles.activeItem : {}),
-        }}
-        {...hoverEffect}
-        onClick={() => navigate('/')}
-      >
-        <FiShoppingCart size={18} />
-        Vendas
-      </div>
+      {(() => {
+        const active = isActive("/");
+        return (
+          <div
+            style={{
+              ...sidebarStyles.menuItem,
+              ...(active ? sidebarStyles.activeItem : {}),
+            }}
+            onMouseEnter={onHover(active)}
+            onMouseLeave={onLeave(active)}
+            onClick={() => navigate("/")}
+          >
+            <FiShoppingCart size={18} />
+            Vendas
+          </div>
+        );
+      })()}
     </aside>
   );
 }

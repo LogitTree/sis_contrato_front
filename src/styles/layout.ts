@@ -1,51 +1,76 @@
-import type { CSSProperties } from 'react';
+// src/styles/layout.ts
+import type { CSSProperties } from "react";
+import { theme } from "./theme";
 
 export const layoutStyles: {
   page: CSSProperties;
   header: CSSProperties;
   card: CSSProperties;
+  cardCompact: CSSProperties;
   title: CSSProperties;
   subtitle: CSSProperties;
+  content: CSSProperties;
 } = {
-  page: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100vh',      // 🔥 FUNDAMENTAL
-    padding: '24px',
-    backgroundColor: '#f3f4f6',
-    boxSizing: 'border-box',
-    width:'100%'
+page: {
+  display: "flex",
+  flexDirection: "column",
+  padding: "24px",
+  backgroundColor: theme.colors.background,
+  boxSizing: "border-box",
+  width: "100%",
+},
+  
+  content: {
+    flex: 1,
+    minHeight: 0,     // 🔥 essencial
+    overflowY: 'auto',
+    paddingRight: 6,
   },
 
   header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',        // 🔥 ocupa toda a largura
-    flexShrink: 0,        // 🔥 impede encolhimento
+    display: "flex",
+    alignItems: "flex-start", // ✅ melhor quando tem subtítulo
+    justifyContent: "space-between",
+    width: "100%",
+    flexShrink: 0,
+
+    // ✅ pequeno respiro
+    padding: "4px 0",
   },
 
   card: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: '12px',
-    padding: '24px',
-    display: 'flex',      // 🔥 FUNDAMENTAL
-    flexDirection: 'column',
-    overflow: 'hidden',   // 🔥 evita estourar
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.md,
+    padding: 24,
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
     minHeight: 0,
+    border: `1px solid ${theme.colors.border}`,
+    boxShadow: theme.shadow.sm,
+    overflowY: 'auto',
+  },
+
+  cardCompact: {
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.md,
+    padding: "14px 16px",
+    border: `1px solid ${theme.colors.border}`,
+    boxShadow: theme.shadow.sm,
   },
 
   title: {
-    fontSize: '24px',
-    fontWeight: 600,
-    color: '#111827',
+    fontSize: 24,
+    fontWeight: 800,
+    color: theme.colors.textPrimary,
+    letterSpacing: -0.2,
   },
 
   subtitle: {
-    fontSize: '18px',
-    fontWeight: 600,
-    color: '#111827',
-    marginBottom: '12px',
+    fontSize: 18,
+    fontWeight: 700,
+    color: theme.colors.textPrimary,
+    marginBottom: 12,
   },
 };

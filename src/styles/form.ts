@@ -1,76 +1,109 @@
-import type { CSSProperties } from 'react';
+import type { CSSProperties } from "react";
+import { theme } from "./theme";
 
 export const formStyles: {
   form: CSSProperties;
   field: CSSProperties;
   row: CSSProperties;
   label: CSSProperties;
+  hint: CSSProperties;
   input: CSSProperties;
   select: CSSProperties;
+  textarea: CSSProperties;
   actions: CSSProperties;
-  textarea:CSSProperties;
-  
+  actionsBar: CSSProperties;
 } = {
   form: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
+    display: "flex",
+    flexDirection: "column",
+    gap: 16, // ✅ mais compacto e moderno
     flex: 1,
-    overflowY: 'auto',
-    width: '100%',
+    overflowY: "auto",
+    width: "100%",
+    paddingRight: 6, // ✅ evita “cortar” scrollbar
+    minHeight: 0, 
   },
 
   row: {
-    display: 'flex',
-    gap: '16px',
-    flexWrap: 'wrap', // 🔥 evita campos apertados
+    display: "grid",
+    gridTemplateColumns: "repeat(12, 1fr)",
+    gap: 12,
   },
 
   field: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '6px',
-    flex: 1,
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: 6,
+    minWidth: 0,
   },
 
   label: {
-    fontSize: '13px',
-    fontWeight: 600,
-    color: '#374151',
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#374151",
+    letterSpacing: 0.2,
+  },
+
+  hint: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    marginTop: -2,
   },
 
   input: {
-    padding: '10px 12px',
-    borderRadius: '6px',
-    border: '1px solid #d1d5db',
-    fontSize: '14px',
-    color: '#111827',
-    outline: 'none',
-    background: '#ffffff',
+    height: 38,
+    padding: "0 12px",
+    borderRadius: theme.radius.sm,
+    border: `1px solid ${theme.colors.border}`,
+    fontSize: 14,
+    color: theme.colors.textPrimary,
+    outline: "none",
+    background: "#ffffff",
+    transition: "border-color .15s ease, box-shadow .15s ease",
+    boxSizing: "border-box",
   },
 
   select: {
-    padding: '10px 12px',
-    borderRadius: '6px',
-    border: '1px solid #d1d5db',
-    fontSize: '14px',
-    color: '#111827',
-    background: '#ffffff',
-  },
-
-  actions: {
-    display: 'flex',
-    gap: '12px',
+    height: 38,
+    padding: "0 12px",
+    borderRadius: theme.radius.sm,
+    border: `1px solid ${theme.colors.border}`,
+    fontSize: 14,
+    color: theme.colors.textPrimary,
+    outline: "none",
+    background: "#ffffff",
+    transition: "border-color .15s ease, box-shadow .15s ease",
+    boxSizing: "border-box",
   },
 
   textarea: {
-    padding: 10,
-    borderRadius: 6,
-    border: '1px solid #d1d5db',
-    backgroundColor: '#ffffff',   // 🔥 fundo branco
-    color: '#111827',              // 🔥 texto escuro
+    padding: "10px 12px",
+    borderRadius: theme.radius.sm,
+    border: `1px solid ${theme.colors.border}`,
+    backgroundColor: "#ffffff",
+    color: theme.colors.textPrimary,
     fontSize: 14,
-    resize: 'vertical',
-    minHeight: 80,
-  }
+    resize: "vertical" as const,
+    minHeight: 92,
+    outline: "none",
+    transition: "border-color .15s ease, box-shadow .15s ease",
+    boxSizing: "border-box",
+  },
+
+  actions: {
+    display: "flex",
+    gap: 12,
+    alignItems: "center",
+  },
+
+  // ✅ padrão “SaaS”: barra inferior com ações
+  actionsBar: {
+    marginTop: "auto",
+    paddingTop: 12,
+    borderTop: `1px solid ${theme.colors.border}`,
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: 12,
+    background: "#fff",
+  },
 };

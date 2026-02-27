@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
-import api from '../../api/api';
-import { buttonStyles } from '../../styles/buttons';
-import { tableStyles } from '../../styles/table';
-import { toast } from 'react-toastify';
-import { formatarDataBR } from '../../utils/masks';
+import { useEffect, useState } from "react";
+import api from "../../api/api";
+import { buttonStyles } from "../../styles/buttons";
+import { tableStyles } from "../../styles/table";
+import { toast } from "react-toastify";
+import { formatarDataBR } from "../../utils/masks";
+import { FiX } from "react-icons/fi";
 
 type Props = {
   orgaoId: number;
@@ -25,9 +26,9 @@ export default function ModalContratosOrgao({ orgaoId, onClose }: Props) {
     async function load() {
       try {
         const res = await api.get(`/orgaocontratante/${orgaoId}/contratos`);
-        setContratos(res.data);
+        setContratos(Array.isArray(res.data) ? res.data : []);
       } catch {
-        toast.error('Erro ao carregar contratos');
+        toast.error("Erro ao carregar contratos");
         onClose();
       } finally {
         setLoading(false);
@@ -37,68 +38,110 @@ export default function ModalContratosOrgao({ orgaoId, onClose }: Props) {
     load();
   }, [orgaoId, onClose]);
 
+  // 🔒 fecha no ESC
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   return (
-    <div style={overlay}>
-      <div style={modal}>
+    <div style={overlay} onMouseDown={onClose}>
+      <div style={modal} onMouseDown={(e) => e.stopPropagation()}>
         {/* ===== HEADER ===== */}
         <div style={header}>
-          <h2 style={title}>📄 Contratos do Órgão</h2>
-          <p style={subtitle}>
-            Lista de contratos vinculados a este órgão
-          </p>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <h2 style={title}>Contratos do Órgão</h2>
+              <p style={subtitle}>Lista de contratos vinculados a este órgão.</p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              title="Fechar"
+              style={{
+                ...buttonStyles.icon,
+                width: 36,
+                height: 36,
+                border: "1px solid #e5e7eb",
+                background: "#ffffff",
+                color: "#0f172a",
+              }}
+            >
+              <FiX size={18} />
+            </button>
+          </div>
         </div>
 
         {/* ===== CONTENT ===== */}
         <div style={content}>
           {loading ? (
-            <p style={{ color: '#0f172a' }}>Carregando...</p>
+            <div style={emptyState}>
+              <div style={emptyTitle}>Carregando...</div>
+              <div style={emptySub}>Buscando contratos vinculados.</div>
+            </div>
           ) : contratos.length === 0 ? (
-            <p style={{ color: '#0f172a' }}>
-              Nenhum contrato encontrado.
-            </p>
+            <div style={emptyState}>
+              <div style={emptyTitle}>Nenhum contrato encontrado</div>
+              <div style={emptySub}>
+                Este órgão ainda não possui contratos vinculados.
+              </div>
+            </div>
           ) : (
-            <table
-              style={{
-                ...tableStyles.table,
-                color: '#0f172a',
-                borderCollapse: 'separate',
-                borderSpacing: 0,
-              }}
-            >
-              <thead>
-                <tr>
-                  <th style={th}>Contrato</th>
-                  <th style={{ ...th, textAlign: 'center' }}>
-                    Início da Vigência
-                  </th>
-                  <th style={{ ...th, textAlign: 'center' }}>
-                    Fim da Vigência
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {contratos.map((c) => (
-                  <tr key={c.id} style={tr}>
-                    <td style={td}>{c.numero}</td>
-
-                    <td style={{ ...td, textAlign: 'center' }}>
-                      {formatarDataBR(c.data_inicio)}
-                    </td>
-
-                    <td style={{ ...td, textAlign: 'center' }}>
-                      {formatarDataBR(c.data_fim)}
-                    </td>
+            <div style={tableWrap}>
+              <table style={tableStyles.table}>
+                <thead>
+                  <tr>
+                    <th style={{ ...tableStyles.th, width: "40%" }}>
+                      Nº do Contrato
+                    </th>
+                    <th style={{ ...tableStyles.th, width: "30%" }}>
+                      Início da Vigência
+                    </th>
+                    <th style={{ ...tableStyles.th, width: "30%" }}>
+                      Fim da Vigência
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+
+                <tbody>
+                  {contratos.map((c) => (
+                    <tr
+                      key={c.id}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.background = "#f8fafc")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.background = "transparent")
+                      }
+                    >
+                      <td style={tableStyles.td}>{c.numero}</td>
+
+                      <td style={{ ...tableStyles.td, textAlign: "center" }}>
+                        {formatarDataBR(c.data_inicio)}
+                      </td>
+
+                      <td style={{ ...tableStyles.td, textAlign: "center" }}>
+                        {formatarDataBR(c.data_fim)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
         {/* ===== FOOTER ===== */}
         <div style={footer}>
-          <button style={buttonStyles.secondary} onClick={onClose}>
+          <button style={buttonStyles.link} onClick={onClose}>
+            Cancelar
+          </button>
+
+          <button style={buttonStyles.primary} onClick={onClose}>
             Fechar
           </button>
         </div>
@@ -107,77 +150,89 @@ export default function ModalContratosOrgao({ orgaoId, onClose }: Props) {
   );
 }
 
-/* ===== ESTILOS ===== */
+/* =========================
+   Styles (padrão do sistema)
+========================= */
 
 const overlay: React.CSSProperties = {
-  position: 'fixed',
+  position: "fixed",
   inset: 0,
-  background: 'rgba(0,0,0,0.55)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
+  background: "rgba(15, 23, 42, 0.55)", // slate-900
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 16,
   zIndex: 1000,
 };
 
 const modal: React.CSSProperties = {
-  background: '#fff',
-  borderRadius: 10,
-  width: 720,
-  maxHeight: '80vh',
-  display: 'flex',
-  flexDirection: 'column',
-  boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
-};
-
-const content: React.CSSProperties = {
-  padding: 20,
-  overflowY: 'auto',
-  flex: 1,
+  width: "min(760px, 100%)",
+  maxHeight: "80vh",
+  background: "#ffffff",
+  borderRadius: 12,
+  border: "1px solid #e5e7eb",
+  boxShadow: "0 20px 50px rgba(0,0,0,0.25)",
+  display: "flex",
+  flexDirection: "column",
+  overflow: "hidden",
 };
 
 const header: React.CSSProperties = {
-  padding: '16px 20px',
-  borderBottom: '1px solid #e5e7eb',
-  background: '#f9fafb',
+  padding: "16px 18px",
+  borderBottom: "1px solid #e5e7eb",
+  background: "#ffffff",
 };
 
 const title: React.CSSProperties = {
   margin: 0,
   fontSize: 18,
-  fontWeight: 600,
-  color: '#0f172a',
+  fontWeight: 700,
+  color: "#0f172a",
 };
 
 const subtitle: React.CSSProperties = {
-  margin: '4px 0 0',
+  margin: "6px 0 0",
   fontSize: 13,
-  color: '#475569',
+  color: "#64748b",
+};
+
+const content: React.CSSProperties = {
+  padding: 18,
+  overflowY: "auto",
+  flex: 1,
+};
+
+const tableWrap: React.CSSProperties = {
+  border: "1px solid #e5e7eb",
+  borderRadius: 10,
+  overflow: "hidden",
+  background: "#ffffff",
 };
 
 const footer: React.CSSProperties = {
   padding: 16,
-  borderTop: '1px solid #e5e7eb',
-  display: 'flex',
-  justifyContent: 'flex-end',
+  borderTop: "1px solid #e5e7eb",
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 10,
+  background: "#ffffff",
 };
 
-/* ===== TABELA ===== */
-
-const th: React.CSSProperties = {
-  padding: '10px 12px',
-  fontSize: 13,
-  fontWeight: 600,
-  color: '#334155',
-  background: '#f1f5f9',
-  borderBottom: '1px solid #e5e7eb',
+const emptyState: React.CSSProperties = {
+  border: "1px dashed #e5e7eb",
+  borderRadius: 10,
+  padding: 18,
+  background: "#fafafa",
 };
 
-const td: React.CSSProperties = {
-  padding: '10px 12px',
+const emptyTitle: React.CSSProperties = {
   fontSize: 14,
-  borderBottom: '1px solid #e5e7eb',
+  fontWeight: 700,
+  color: "#0f172a",
 };
 
-const tr: React.CSSProperties = {
-  transition: 'background 0.15s ease',
+const emptySub: React.CSSProperties = {
+  marginTop: 6,
+  fontSize: 13,
+  color: "#64748b",
 };

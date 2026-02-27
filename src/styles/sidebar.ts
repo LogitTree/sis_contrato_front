@@ -1,64 +1,91 @@
-import type { CSSProperties } from 'react';
+// src/styles/sidebar.ts
+import type { CSSProperties } from "react";
+import { theme } from "./theme";
 
-export const sidebarStyles: Record<string, CSSProperties> = {
-    container: {
-        width: '240px',
-        backgroundColor: '#111827',
-        color: '#e5e7eb',
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '16px 12px',
-    },
+export const sidebarStyles: {
+  container: CSSProperties;
+  logo: CSSProperties;
+  menuItem: CSSProperties;
+  activeItem: CSSProperties;
+  submenu: CSSProperties;
+  submenuItem: CSSProperties;
+  activeSubItem: CSSProperties;
+  sectionLabel: CSSProperties;
+} = {
+  container: {
+    width: 260,
+    height: "100vh",
+    background: theme.colors.sidebar,
+    color: "#fff",
+    display: "flex",
+    flexDirection: "column",
+    padding: 16,
+    boxSizing: "border-box",
+    borderRight: `1px solid rgba(226,232,240,0.08)`,
+  },
 
-    logo: {
-        fontSize: '18px',
-        fontWeight: 700,
-        color: '#fff',
-        marginBottom: '24px',
-    },
+  logo: {
+    fontSize: 16,
+    fontWeight: 900,
+    letterSpacing: 0.4,
+    padding: "10px 12px",
+    borderRadius: 12,
+    background: "rgba(255,255,255,0.06)",
+    marginBottom: 14,
+  },
 
-    menuItem: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        padding: '10px 12px',
-        fontSize: '14px', // 🔥 fonte menor
-        borderRadius: '8px',
-        cursor: 'pointer',
-        color: '#d1d5db',
-    },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: 800,
+    color: "rgba(255,255,255,0.55)",
+    padding: "10px 12px 6px",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
 
-    menuItemHover: {
-        backgroundColor: '#1f2937',
-    },
+  menuItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "10px 12px",
+    borderRadius: 12,
+    cursor: "pointer",
+    fontSize: 13,
+    fontWeight: 600,
+    color: "rgba(255,255,255,0.9)",
+    userSelect: "none",
+    transition: "background .18s ease, transform .18s ease",
+  },
 
-    submenu: {
-        marginLeft: '12px',
-        marginTop: '6px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '4px',
-    },
+  activeItem: {
+    background: "rgba(37, 99, 235, 0.14)",
+    borderLeft: `3px solid ${theme.colors.primary}`,
+    paddingLeft: 9, // compensa border-left
+  },
 
-    submenuItem: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '8px 12px',
-        fontSize: '13px',
-        borderRadius: '6px',
-        cursor: 'pointer',
-        color: '#9ca3af',
-    },
+  submenu: {
+    marginLeft: 8,
+    paddingLeft: 10,
+    borderLeft: "1px dashed rgba(255,255,255,0.14)",
+    marginTop: 6,
+    marginBottom: 8,
+  },
 
-    activeItem: {
-        backgroundColor: '#1f2937',
-        color: '#ffffff',
-    },
+  submenuItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "9px 12px",
+    borderRadius: 10,
+    cursor: "pointer",
+    fontSize: 13,
+    fontWeight: 500,
+    color: "rgba(255,255,255,0.82)",
+    transition: "background .18s ease",
+  },
 
-    activeSubItem: {
-        backgroundColor: '#374151',
-        color: '#ffffff',
-    },
-
+  activeSubItem: {
+    background: "rgba(255,255,255,0.08)",
+    color: "#fff",
+  },
 };

@@ -52,6 +52,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       senha,
     });
 
+    
     const { token, user } = response.data;
 
     localStorage.setItem('@contratos:token', token);
