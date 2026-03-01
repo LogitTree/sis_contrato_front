@@ -125,7 +125,6 @@ export default function PedidoVendaCreate() {
   const [contratoItemId, setContratoItemId] = useState("");
   const [produtoId, setProdutoId] = useState("");
   const [qtd, setQtd] = useState("");
-  const [precoUnit, setPrecoUnit] = useState("");
 
   const qtdRef = useRef<HTMLInputElement | null>(null);
 
@@ -265,25 +264,19 @@ export default function PedidoVendaCreate() {
       setContratoItemId("");
       setProdutoId("");
       setQtd("");
-      setPrecoUnit("");
       return;
     }
     loadContratoItens(id);
     setContratoItemId("");
     setProdutoId("");
     setQtd("");
-    setPrecoUnit("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contratoId]);
 
-  // preço sempre do contrato
+  // ao selecionar item: preenche produto e foca qtd
   useEffect(() => {
     if (!contratoItemSelecionado) return;
     setProdutoId(String(contratoItemSelecionado.produto_id));
-
-    const precoContrato = moneyFromApi(contratoItemSelecionado.preco_unitario_contratado);
-    setPrecoUnit(String(precoContrato || ""));
-
     setTimeout(() => qtdRef.current?.focus(), 60);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contratoItemId]);
@@ -339,8 +332,7 @@ export default function PedidoVendaCreate() {
 
       toast.success("Pedido criado. Agora adicione os itens.");
       await loadPedido(id);
-      // carrega saldo atualizado do contrato também
-      await loadContratoItens(Number(contratoId));
+      if (contratoId) await loadContratoItens(Number(contratoId));
     } catch (err: any) {
       console.error(err);
       toast.error(err?.response?.data?.error || "Erro ao salvar cabeçalho");
@@ -385,10 +377,8 @@ export default function PedidoVendaCreate() {
       setContratoItemId("");
       setProdutoId("");
       setQtd("");
-      setPrecoUnit("");
 
       await loadPedido(pedidoId);
-      // ✅ atualiza saldos do contrato após inserir
       if (contratoId) await loadContratoItens(Number(contratoId));
     } catch (err: any) {
       console.error(err);
@@ -404,11 +394,10 @@ export default function PedidoVendaCreate() {
 
     setRemovingItemId(itemId);
     try {
-      await api.delete(`/pedidoitem/${pedidoId}/itens/${itemId}`);
+      await api.delete(`/pedidosvenda/${pedidoId}/itens/${itemId}`);
       toast.success("Item removido");
 
       await loadPedido(pedidoId);
-      // ✅ atualiza saldos do contrato após remover
       if (contratoId) await loadContratoItens(Number(contratoId));
     } catch (err: any) {
       console.error(err);
@@ -454,9 +443,7 @@ export default function PedidoVendaCreate() {
             {pedidoId ? `Pedido de Venda #${pedidoId}` : "Novo Pedido de Venda"}
           </h1>
           <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
-            {pedidoId
-              ? "Cabeçalho criado. Insira os itens abaixo."
-              : "Crie o cabeçalho e depois adicione os itens do pedido."}
+            {pedidoId ? "Cabeçalho criado. Insira os itens abaixo." : "Crie o cabeçalho e depois adicione os itens do pedido."}
           </div>
         </div>
       </div>
@@ -473,20 +460,12 @@ export default function PedidoVendaCreate() {
             <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
               <div style={{ display: "flex", gap: 16, width: "100%", alignItems: "flex-end" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
-                    Contrato (Número - Órgão)
-                  </label>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Contrato (Número - Órgão)</label>
 
                   <select
                     value={contratoId}
                     onChange={(e) => setContratoId(e.target.value)}
-                    style={{
-                      ...filterStyles.select,
-                      height: 38,
-                      padding: "0 12px",
-                      boxSizing: "border-box",
-                      width: "100%",
-                    }}
+                    style={{ ...filterStyles.select, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
                     disabled={disableHeader}
                   >
                     <option value="">Selecione...</option>
@@ -516,13 +495,7 @@ export default function PedidoVendaCreate() {
                     type="date"
                     value={data}
                     onChange={(e) => setData(e.target.value)}
-                    style={{
-                      ...filterStyles.input,
-                      height: 38,
-                      padding: "0 12px",
-                      boxSizing: "border-box",
-                      width: "100%",
-                    }}
+                    style={{ ...filterStyles.input, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
                     disabled={disableHeader}
                   />
 
@@ -534,22 +507,13 @@ export default function PedidoVendaCreate() {
 
               <div style={{ display: "flex", gap: 16, width: "100%" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
-                    Observação
-                  </label>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Observação</label>
 
                   <textarea
                     value={observacao}
                     onChange={(e) => setObservacao(e.target.value)}
                     placeholder="Opcional"
-                    style={{
-                      ...filterStyles.input,
-                      height: 120,
-                      padding: "10px 12px",
-                      boxSizing: "border-box",
-                      width: "100%",
-                      resize: "vertical",
-                    }}
+                    style={{ ...filterStyles.input, height: 120, padding: "10px 12px", boxSizing: "border-box", width: "100%", resize: "vertical" }}
                     disabled={disableHeader}
                   />
                 </div>
@@ -587,20 +551,12 @@ export default function PedidoVendaCreate() {
             <div style={{ display: "flex", gap: 16, alignItems: "flex-end", width: "100%" }}>
               {/* select item */}
               <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
-                  Item do Contrato (Produto)
-                </label>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Item do Contrato (Produto)</label>
 
                 <select
                   value={contratoItemId}
                   onChange={(e) => setContratoItemId(e.target.value)}
-                  style={{
-                    ...filterStyles.select,
-                    height: 38,
-                    padding: "0 12px",
-                    boxSizing: "border-box",
-                    width: "100%",
-                  }}
+                  style={{ ...filterStyles.select, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
                   disabled={disableItem || !contratoId}
                 >
                   <option value="">{pedidoId ? "Selecione..." : "Salve o cabeçalho primeiro"}</option>
@@ -611,7 +567,7 @@ export default function PedidoVendaCreate() {
                   ))}
                 </select>
 
-                {/* ✅ visual melhor: 2 linhas claras */}
+                {/* ✅ visual melhor */}
                 <div style={helperLineStyle}>
                   {contratoItemSelecionado ? (
                     <>
@@ -665,9 +621,7 @@ export default function PedidoVendaCreate() {
 
               {/* preço */}
               <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 260 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
-                  Preço Unitário (Contrato)
-                </label>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Preço Unitário (Contrato)</label>
                 <input
                   value={contratoItemSelecionado ? `R$ ${formatMoneyBR(precoContratoAtual)}` : ""}
                   readOnly
@@ -692,14 +646,7 @@ export default function PedidoVendaCreate() {
                 <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>&nbsp;</label>
                 <button
                   type="button"
-                  style={{
-                    ...buttonStyles.primary,
-                    height: 38,
-                    padding: "0 12px",
-                    width: "100%",
-                    whiteSpace: "nowrap",
-                    fontSize: 13,
-                  }}
+                  style={{ ...buttonStyles.primary, height: 38, padding: "0 12px", width: "100%", whiteSpace: "nowrap", fontSize: 13 }}
                   onClick={handleAddItem}
                   disabled={!canInsert}
                 >
@@ -763,15 +710,7 @@ export default function PedidoVendaCreate() {
                     <tr key={it.id} style={{ background: idx % 2 === 0 ? "#fff" : "#f9fafb" }}>
                       <td style={tableStyles.td}>{it.id}</td>
 
-                      <td
-                        style={{
-                          ...tableStyles.td,
-                          whiteSpace: "normal",
-                          wordBreak: "break-word",
-                          lineHeight: 1.35,
-                        }}
-                        title={nome}
-                      >
+                      <td style={{ ...tableStyles.td, whiteSpace: "normal", wordBreak: "break-word", lineHeight: 1.35 }} title={nome}>
                         <div style={{ fontWeight: 700, color: "#0f172a" }}>{nome}</div>
                         {it.motivo_bloqueio ? (
                           <div style={{ marginTop: 6, fontSize: 12, color: "#b91c1c" }}>{it.motivo_bloqueio}</div>
@@ -780,17 +719,11 @@ export default function PedidoVendaCreate() {
 
                       <td style={{ ...tableStyles.td, textAlign: "center" }}>{unid}</td>
 
-                      <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>
-                        {formatQtyBR(qtdN)}
-                      </td>
+                      <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>{formatQtyBR(qtdN)}</td>
 
-                      <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>
-                        R$ {formatMoneyBR(precoN)}
-                      </td>
+                      <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>R$ {formatMoneyBR(precoN)}</td>
 
-                      <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8, fontWeight: 800 }}>
-                        R$ {formatMoneyBR(subtotal)}
-                      </td>
+                      <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8, fontWeight: 800 }}>R$ {formatMoneyBR(subtotal)}</td>
 
                       <td style={{ ...tableStyles.td, textAlign: "center" }}>
                         <span style={statusStyle(it.aprovado)}>{it.aprovado ? "SIM" : "NÃO"}</span>

@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 
-import { layoutStyles } from "../../styles/layout";
 import { filterStyles } from "../../styles/filters";
 import { buttonStyles } from "../../styles/buttons";
 

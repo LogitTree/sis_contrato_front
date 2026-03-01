@@ -8,7 +8,6 @@ import { tableStyles } from "../../styles/table";
 import { buttonStyles } from "../../styles/buttons";
 import { badgeStyles } from "../../styles/badges";
 import { filterStyles } from "../../styles/filters";
-import { fieldFocusHandlers } from "../../styles/focus";
 
 import { FiEdit, FiTrash2, FiList, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import { formatarDataBR } from "../../utils/masks";
