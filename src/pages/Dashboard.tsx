@@ -36,10 +36,10 @@ export default function Dashboard() {
   ========================= */
   const kpis = useMemo(
     () => [
-      { label: "Contratos Ativos", value: 42, hint: "+3 este mês" },
-      { label: "Contratos a Vencer (30d)", value: 7, hint: "atenção" },
-      { label: "Empresas Ativas", value: 128, hint: "+5 este mês" },
-      { label: "Órgãos Cadastrados", value: 19, hint: "estável" },
+      { label: "Contratos Ativos", value: 0, hint: "0 este mês" },
+      { label: "Contratos a Vencer (30d)", value: 0, hint: "atenção" },
+      { label: "Empresas Ativas", value: 0, hint: "0 este mês" },
+      { label: "Órgãos Cadastrados", value: 0, hint: "estável" },
     ],
     []
   );
@@ -330,8 +330,16 @@ export default function Dashboard() {
         >
           🚧 Módulo em desenvolvimento — dados meramente ilustrativos.
         </div>
-
-        {/* KPIs */}
+        <div style={layoutStyles.card}>
+          <div style={sectionTitle}>Atalhos do Sistema</div>
+          <div style={{ height: 1, background: "#eef2f7", margin: "10px 0 4px" }} />
+          <div style={gridShortcuts}>
+            <Shortcut title="Contratos" description="Gerencie contratos e vigências" path="/contratos" />
+            <Shortcut title="Produtos" description="Cadastro e controle de produtos" path="/produtos" />
+            <Shortcut title="Órgãos" description="Órgãos contratantes e vínculos" path="/orgaos" />
+            <Shortcut title="Empresas" description="Empresas contratadas e status" path="/empresas" />
+          </div>
+        </div>
         <div style={gridDashboard}>
           {kpis.map((k) => (
             <div key={k.label} style={{ ...kpiCard, gridColumn: "span 3" }}>
@@ -467,18 +475,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* ATALHOS */}
-        {/* ATALHOS */}
-        <div style={layoutStyles.card}>
-          <div style={sectionTitle}>Atalhos do Sistema</div>
-          <div style={{ height: 1, background: "#eef2f7", margin: "10px 0 4px" }} />
-          <div style={gridShortcuts}>
-            <Shortcut title="Contratos" description="Gerencie contratos e vigências" path="/contratos" />
-            <Shortcut title="Produtos" description="Cadastro e controle de produtos" path="/produtos" />
-            <Shortcut title="Órgãos" description="Órgãos contratantes e vínculos" path="/orgaos" />
-            <Shortcut title="Empresas" description="Empresas contratadas e status" path="/empresas" />
-          </div>
-        </div>
       </div>
     </div>
   );

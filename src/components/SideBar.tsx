@@ -151,7 +151,7 @@ export default function Sidebar() {
 
       {/* Vendas */}
       {(() => {
-        const active = isActive("/");
+        const active = isActive("/pedidosvenda");
         return (
           <div
             style={{
@@ -160,7 +160,7 @@ export default function Sidebar() {
             }}
             onMouseEnter={onHover(active)}
             onMouseLeave={onLeave(active)}
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/pedidosvenda")}
           >
             <FiShoppingCart size={18} />
             Vendas

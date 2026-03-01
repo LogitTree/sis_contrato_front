@@ -26,6 +26,8 @@ import ContratoEdit from '../pages/Contratos/Edit';
 import ContratoItens from '../pages/Contratos/ContratoItens';
 import PedidoVenda from '../pages/PedidoVenda/List';
 import Login from '../pages/Login';
+import PedidoVendaCreate from "../pages/PedidoVenda/Create";
+import PedidoVendaEdit from "../pages/PedidoVenda/Edit";
 
 
 export default function AppRoutes() {
@@ -65,6 +67,8 @@ export default function AppRoutes() {
             <Route path="/contratos/:id/itens" element={<ContratoItens />} />
 
             <Route path="/pedidosvenda" element={<PedidoVenda />} />
+            <Route path="/pedidosvenda/novo" element={<PedidoVendaCreate />} />
+            <Route path="/pedidosvenda/:id/editar" element={<PedidoVendaEdit />} />
           </Route>
         </Routes>
       </AuthProvider>

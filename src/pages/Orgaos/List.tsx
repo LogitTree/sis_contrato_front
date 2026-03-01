@@ -26,22 +26,41 @@ export default function OrgaosList() {
   const [orgaos, setOrgaos] = useState<OrgaoContratante[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [page, setPage] = useState(1);
-  const [limit] = useState(10);
-  const [totalPages, setTotalPages] = useState(1);
+  // filtros
+  const [filtroNome, setFiltroNome] = useState("");
+  const [debouncedFiltroNome, setDebouncedFiltroNome] = useState("");
+  const [esfera, setEsfera] = useState("");
 
-  const [filters, setFilters] = useState({
-    nome: "",
-    esfera: "",
-  });
-
+  // ordenação
   const [sort, setSort] = useState<"id" | "nome" | "cnpj" | "esfera">("nome");
   const [dir, setDir] = useState<"ASC" | "DESC">("ASC");
+
+  // paginação
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0); // se sua API não devolver total, fica 0
+  const [totalPages, setTotalPages] = useState(1);
+  const [limit] = useState(10);
 
   const [showModal, setShowModal] = useState(false);
   const [orgaoSelecionado, setOrgaoSelecionado] = useState<number | null>(null);
 
   const navigate = useNavigate();
+
+  const safeTotal = Number.isFinite(total) && total > 0 ? total : orgaos.length;
+  const safeTotalPages = Math.max(1, totalPages || 1);
+
+  function handleSort(field: typeof sort) {
+    if (sort === field) setDir((prev) => (prev === "ASC" ? "DESC" : "ASC"));
+    else {
+      setSort(field);
+      setDir("ASC");
+    }
+  }
+
+  function renderSortIcon(column: typeof sort) {
+    if (sort !== column) return null;
+    return dir === "ASC" ? <FiChevronUp size={14} /> : <FiChevronDown size={14} />;
+  }
 
   async function loadData() {
     try {
@@ -53,14 +72,18 @@ export default function OrgaosList() {
           limit,
           sort,
           dir,
-          nome: filters.nome,
-          esfera: filters.esfera,
+          nome: debouncedFiltroNome,
+          esfera,
         },
       });
 
-      // mesmo padrão que você já está usando
       setOrgaos(res.data.data ?? []);
+
+      // se existir meta, usa. se não, cai num padrão seguro.
       setTotalPages(res.data.meta?.totalPages ?? 1);
+
+      // se sua API tiver total, aproveita (opcional)
+      setTotal(res.data.total ?? 0);
     } catch (error) {
       console.error(error);
       toast.error("Erro ao carregar órgãos");
@@ -69,25 +92,20 @@ export default function OrgaosList() {
     }
   }
 
+  // debounce do texto
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedFiltroNome(filtroNome), 450);
+    return () => clearTimeout(timeout);
+  }, [filtroNome]);
+
+  // buscar ao mudar filtros/paginação/ordenação
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, sort, dir, filters.nome, filters.esfera]);
+  }, [page, debouncedFiltroNome, esfera, sort, dir]);
 
-  function handleSort(field: typeof sort) {
-    if (sort === field) {
-      setDir((prev) => (prev === "ASC" ? "DESC" : "ASC"));
-    } else {
-      setSort(field);
-      setDir("ASC");
-    }
-    setPage(1);
-  }
-
-  function renderSortIcon(column: typeof sort) {
-    if (sort !== column) return null;
-    return dir === "ASC" ? <FiChevronUp size={14} /> : <FiChevronDown size={14} />;
-  }
+  // reset de página ao mudar filtros/ordenação
+  useEffect(() => setPage(1), [filtroNome, esfera, sort, dir]);
 
   async function handleDelete(id: number) {
     if (!window.confirm("Deseja inativar este órgão?")) return;
@@ -96,7 +114,8 @@ export default function OrgaosList() {
       await api.delete(`/orgaocontratante/${id}`);
       toast.success("Órgão inativado");
       loadData();
-    } catch {
+    } catch (error) {
+      console.error(error);
       toast.error("Erro ao excluir órgão");
     }
   }
@@ -113,197 +132,219 @@ export default function OrgaosList() {
         <div>
           <h1 style={layoutStyles.title}>Órgãos Contratantes</h1>
           <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
-            Gerencie os órgãos vinculados aos contratos.
+            {loading ? "Carregando..." : `${safeTotal} registro(s) encontrado(s)`}
           </div>
         </div>
+      </div>
+
+      {/* FILTROS (card separado - igual empresas) */}
+      <div style={layoutStyles.cardCompact}>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 16, width: "100%" }}>
+          {/* Busca ocupa tudo */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>
+              Nome do Órgão
+            </label>
+
+            <input
+              type="text"
+              placeholder="Buscar por nome"
+              value={filtroNome}
+              onChange={(e) => setFiltroNome(e.target.value)}
+              style={{ ...filterStyles.input, width: "100%" }}
+              {...fieldFocusHandlers}
+            />
+          </div>
+
+          {/* Esfera fixa */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>
+              Esfera
+            </label>
+
+            <select
+              value={esfera}
+              onChange={(e) => setEsfera(e.target.value)}
+              style={{ ...filterStyles.select, width: "100%" }}
+              {...fieldFocusHandlers}
+            >
+              <option value="">Todas</option>
+              <option value="MUNICIPAL">Municipal</option>
+              <option value="ESTADUAL">Estadual</option>
+              <option value="FEDERAL">Federal</option>
+            </select>
+          </div>
+
+          {(filtroNome || esfera) && (
+            <button
+              style={{ ...buttonStyles.link, marginBottom: 2 }}
+              onClick={() => {
+                setFiltroNome("");
+                setEsfera("");
+              }}
+              title="Limpar filtros"
+            >
+              Limpar
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* BOTÕES ABAIXO DO FILTRO (igual empresas) */}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, margin: "12px 0 16px" }}>
+        <button style={buttonStyles.link} onClick={() => navigate(-1)}>
+          Voltar
+        </button>
 
         <button style={buttonStyles.primary} onClick={() => navigate("/orgaos/novo")}>
           + Novo Órgão
         </button>
       </div>
 
-      {/* CARD ÚNICO (igual empresas) */}
+      {/* TABELA (card separado - igual empresas) */}
       <div style={layoutStyles.card}>
-        {/* Título interno + divisor (igual empresas) */}
-        <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
-          Lista de Órgãos
+        <div style={{ paddingBottom: 12, fontSize: 13, color: "#64748b" }}>
+          Exibindo {orgaos.length} de {safeTotal} registro(s)
         </div>
 
-        <div
-          style={{
-            height: 1,
-            background: "#eef2f7",
-            margin: "12px 0 10px",
-          }}
-        />
-
-        {/* 🔎 Filtros (padrão empresas) */}
-        <div style={filterStyles.container}>
-          <span style={filterStyles.title}>Filtro</span>
-
-          <div style={filterStyles.row}>
-            <input
-              placeholder="Buscar por nome"
-              style={filterStyles.input}
-              {...fieldFocusHandlers}
-              value={filters.nome}
-              onChange={(e) => setFilters({ ...filters, nome: e.target.value })}
-            />
-
-            <select
-              style={filterStyles.select}
-              {...fieldFocusHandlers}
-              value={filters.esfera}
-              onChange={(e) => setFilters({ ...filters, esfera: e.target.value })}
-            >
-              <option value="">Todas as esferas</option>
-              <option value="MUNICIPAL">Municipal</option>
-              <option value="ESTADUAL">Estadual</option>
-              <option value="FEDERAL">Federal</option>
-            </select>
-
-            <button
-              type="button"
-              style={buttonStyles.secondary}
-              onClick={() => {
-                setFilters({ nome: "", esfera: "" });
-                setPage(1);
-              }}
-            >
-              Limpar
-            </button>
-          </div>
-        </div>
-
-        {/* 📋 Tabela */}
-        <table style={tableStyles.table}>
-          <thead>
-            <tr>
-              <th
-                style={{ ...tableStyles.th, width: "5%", cursor: "pointer" }}
-                onClick={() => handleSort("id")}
-              >
-                ID {renderSortIcon("id")}
-              </th>
-
-              <th
-                style={{ ...tableStyles.th, width: "40%", cursor: "pointer" }}
-                onClick={() => handleSort("nome")}
-              >
-                Nome {renderSortIcon("nome")}
-              </th>
-
-              <th
-                style={{ ...tableStyles.th, width: "20%", cursor: "pointer" }}
-                onClick={() => handleSort("cnpj")}
-              >
-                CNPJ {renderSortIcon("cnpj")}
-              </th>
-
-              <th
-                style={{ ...tableStyles.th, width: "15%", cursor: "pointer" }}
-                onClick={() => handleSort("esfera")}
-              >
-                Esfera {renderSortIcon("esfera")}
-              </th>
-
-              <th style={{ ...tableStyles.th, width: "10%", textAlign: "center" }}>
-                Contratos
-              </th>
-
-              <th style={{ ...tableStyles.th, width: "10%", textAlign: "center" }}>
-                Ações
-              </th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {loading && (
+        <div style={{ overflowX: "auto" }}>
+          <table style={tableStyles.table}>
+            <thead style={tableStyles.thead}>
               <tr>
-                <td colSpan={6} style={{ ...tableStyles.td, textAlign: "center", padding: 20 }}>
-                  Carregando...
-                </td>
+                <th
+                  style={{ ...tableStyles.th, width: 70, cursor: "pointer" }}
+                  onClick={() => handleSort("id")}
+                >
+                  ID {renderSortIcon("id")}
+                </th>
+
+                <th
+                  style={{ ...tableStyles.th, width: "40%", cursor: "pointer" }}
+                  onClick={() => handleSort("nome")}
+                >
+                  Nome {renderSortIcon("nome")}
+                </th>
+
+                <th
+                  style={{ ...tableStyles.th, width: "22%", cursor: "pointer" }}
+                  onClick={() => handleSort("cnpj")}
+                >
+                  CNPJ {renderSortIcon("cnpj")}
+                </th>
+
+                <th
+                  style={{ ...tableStyles.th, width: 150, cursor: "pointer" }}
+                  onClick={() => handleSort("esfera")}
+                >
+                  Esfera {renderSortIcon("esfera")}
+                </th>
+
+                <th style={{ ...tableStyles.th, width: 120, textAlign: "center" }}>
+                  Contratos
+                </th>
+
+                <th style={{ ...tableStyles.th, width: 120, textAlign: "center" }}>
+                  Ações
+                </th>
               </tr>
-            )}
+            </thead>
 
-            {!loading && orgaos.length === 0 && (
-              <tr>
-                <td colSpan={6} style={{ ...tableStyles.td, textAlign: "center", padding: 20 }}>
-                  Nenhum órgão encontrado.
-                </td>
-              </tr>
-            )}
-
-            {!loading &&
-              orgaos.map((o) => (
-                <tr key={o.id}>
-                  <td style={tableStyles.td}>{o.id}</td>
-                  <td style={tableStyles.td}>{o.nome}</td>
-                  <td style={tableStyles.td}>{o.cnpj}</td>
-
-                  <td style={tableStyles.td}>
-                    <span style={badgeStyles.base}>{o.esfera}</span>
-                  </td>
-
-                  <td style={{ ...tableStyles.td, textAlign: "center" }}>
-                    <button style={buttonStyles.link} onClick={() => openContratos(o.id)}>
-                      {o.total_contratos || 0}
-                    </button>
-                  </td>
-
-                  <td style={tableStyles.td}>
-                    <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-                      <button
-                        title="Editar"
-                        style={{ ...buttonStyles.icon, color: "#2563eb" }}
-                        onClick={() => navigate(`/orgaos/${o.id}/editar`)}
-                      >
-                        <FiEdit size={18} />
-                      </button>
-
-                      <button
-                        title="Excluir"
-                        style={{ ...buttonStyles.icon, color: "#dc2626" }}
-                        onClick={() => handleDelete(o.id)}
-                      >
-                        <FiTrash2 size={18} />
-                      </button>
-                    </div>
+            <tbody>
+              {loading && (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: "center", padding: 20 }}>
+                    Carregando...
                   </td>
                 </tr>
-              ))}
-          </tbody>
-        </table>
+              )}
 
-        {/* 🔢 Paginação (igual empresas) */}
-        {orgaos.length > 0 && (
+              {!loading && orgaos.length === 0 && (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: "center", padding: 20 }}>
+                    Nenhum órgão encontrado.
+                  </td>
+                </tr>
+              )}
+
+              {!loading &&
+                orgaos.map((o, index) => (
+                  <tr key={o.id} style={tableStyles.row(index)}>
+                    <td style={tableStyles.td}>{o.id}</td>
+                    <td style={{ ...tableStyles.td, ...tableStyles.tdWrap }}>{o.nome}</td>
+                    <td style={tableStyles.td}>{o.cnpj}</td>
+
+                    <td style={tableStyles.td}>
+                      <span style={badgeStyles.base}>{o.esfera}</span>
+                    </td>
+
+                    <td style={{ ...tableStyles.td, textAlign: "center" }}>
+                      <button style={buttonStyles.link} onClick={() => openContratos(o.id)}>
+                        {o.total_contratos || 0}
+                      </button>
+                    </td>
+
+                    <td style={{ ...tableStyles.td, textAlign: "center" }}>
+                      <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                        <button
+                          title="Editar"
+                          style={buttonStyles.icon}
+                          onClick={() => navigate(`/orgaos/${o.id}/editar`)}
+                          onMouseEnter={(ev) =>
+                            (ev.currentTarget.style.background = "rgba(37,99,235,0.08)")
+                          }
+                          onMouseLeave={(ev) => (ev.currentTarget.style.background = "transparent")}
+                        >
+                          <FiEdit size={18} color="#2563eb" />
+                        </button>
+
+                        <button
+                          title="Excluir"
+                          style={buttonStyles.icon}
+                          onClick={() => handleDelete(o.id)}
+                          onMouseEnter={(ev) =>
+                            (ev.currentTarget.style.background = "rgba(220,38,38,0.08)")
+                          }
+                          onMouseLeave={(ev) => (ev.currentTarget.style.background = "transparent")}
+                        >
+                          <FiTrash2 size={18} color="#dc2626" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* PAGINAÇÃO (igual empresas) */}
+        {safeTotalPages > 1 && (
           <div
             style={{
               display: "flex",
               justifyContent: "center",
               alignItems: "center",
               gap: 12,
-              marginTop: 20,
+              marginTop: 16,
             }}
           >
             <button
               disabled={page === 1}
-              onClick={() => setPage((p) => p - 1)}
+              onClick={() => setPage((prev) => prev - 1)}
               style={buttonStyles.paginationButtonStyle(page === 1)}
             >
-              <FiChevronLeft size={18} />
+              <FiChevronLeft size={20} />
             </button>
 
-            <span style={{ fontWeight: 600, color: "#0f172a" }}>
-              Página {page} de {totalPages}
+            <span style={{ fontWeight: 600, minWidth: 90, textAlign: "center" }}>
+              Página {page} de {safeTotalPages}
             </span>
 
             <button
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => p + 1)}
-              style={buttonStyles.paginationButtonStyle(page >= totalPages)}
+              disabled={page >= safeTotalPages}
+              onClick={() => setPage((prev) => prev + 1)}
+              style={buttonStyles.paginationButtonStyle(page >= safeTotalPages)}
             >
-              <FiChevronRight size={18} />
+              <FiChevronRight size={20} />
             </button>
           </div>
         )}
@@ -311,7 +352,10 @@ export default function OrgaosList() {
 
       {/* Modal */}
       {showModal && orgaoSelecionado && (
-        <ModalContratosOrgao orgaoId={orgaoSelecionado} onClose={() => setShowModal(false)} />
+        <ModalContratosOrgao
+          orgaoId={orgaoSelecionado}
+          onClose={() => setShowModal(false)}
+        />
       )}
     </div>
   );

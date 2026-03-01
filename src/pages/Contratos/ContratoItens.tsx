@@ -28,6 +28,11 @@ type ContratoItem = {
   preco_unitario_contratado: number;
   qtd_maxima_contratada: number;
   valor_maximo_contratado: number;
+
+  qtd_utilizada?: number | string;
+  qtde_utilizada?: number | string;
+  saldo_contrato?: number | string;
+
   produto?: Produto;
 };
 
@@ -45,6 +50,27 @@ type Contrato = {
 ========================= */
 function moedaBR(valor: number) {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function toNumberAny(v: any): number {
+  if (v === null || v === undefined) return 0;
+  const s = String(v).trim();
+  if (!s) return 0;
+
+  const hasComma = s.includes(",");
+  const hasDot = s.includes(".");
+
+  if (hasComma && hasDot) {
+    const normalized = s.replace(/\./g, "").replace(",", ".");
+    const n = Number(normalized);
+    return Number.isFinite(n) ? n : 0;
+  }
+  if (hasComma) {
+    const n = Number(s.replace(",", "."));
+    return Number.isFinite(n) ? n : 0;
+  }
+  const n = Number(s);
+  return Number.isFinite(n) ? n : 0;
 }
 
 /* =========================
@@ -69,9 +95,7 @@ export default function ContratoItens() {
   }
 
   async function removerItem(itemId: number) {
-    const confirmar = window.confirm(
-      "Tem certeza que deseja remover este item do contrato?"
-    );
+    const confirmar = window.confirm("Tem certeza que deseja remover este item do contrato?");
     if (!confirmar) return;
 
     try {
@@ -94,17 +118,13 @@ export default function ContratoItens() {
         setLoading(false);
       }
     }
-
     load();
   }, [id, navigate]);
 
   const totalContrato = useMemo(() => {
     if (!contrato) return 0;
     return contrato.itens.reduce((acc, item) => {
-      return (
-        acc +
-        Number(item.preco_unitario_contratado) * Number(item.qtd_maxima_contratada)
-      );
+      return acc + Number(item.preco_unitario_contratado) * Number(item.qtd_maxima_contratada);
     }, 0);
   }, [contrato]);
 
@@ -124,8 +144,12 @@ export default function ContratoItens() {
 
   if (!contrato) return null;
 
-  const empresaLabel =
-    contrato.empresa?.nome_fantasia || contrato.empresa?.razao_social || "—";
+  const empresaLabel = contrato.empresa?.nome_fantasia || contrato.empresa?.razao_social || "—";
+
+  // estilos auxiliares para “linhas” dentro das células
+  const cellTop: React.CSSProperties = { fontWeight: 800, color: "#0f172a" };
+  const cellSub: React.CSSProperties = { marginTop: 4, fontSize: 12, color: "#64748b", lineHeight: 1.2 };
+  const cellSub2: React.CSSProperties = { marginTop: 2, fontSize: 12, color: "#64748b", lineHeight: 1.2 };
 
   return (
     <div style={layoutStyles.page}>
@@ -134,9 +158,9 @@ export default function ContratoItens() {
         <div>
           <h1 style={layoutStyles.title}>Itens do Contrato</h1>
           <p style={{ margin: "6px 0 0", color: "#64748b", fontSize: 13 }}>
-            Contrato Nº <strong style={{ color: "#0f172a" }}>{contrato.numero}</strong>{" "}
-            • Órgão: <strong style={{ color: "#0f172a" }}>{contrato.orgao?.nome ?? "—"}</strong>{" "}
-            • Empresa: <strong style={{ color: "#0f172a" }}>{empresaLabel}</strong>
+            Contrato Nº <strong style={{ color: "#0f172a" }}>{contrato.numero}</strong> • Órgão:{" "}
+            <strong style={{ color: "#0f172a" }}>{contrato.orgao?.nome ?? "—"}</strong> • Empresa:{" "}
+            <strong style={{ color: "#0f172a" }}>{empresaLabel}</strong>
           </p>
         </div>
 
@@ -144,9 +168,7 @@ export default function ContratoItens() {
           <span
             style={{
               ...badgeStyles.base,
-              ...(contrato.status === "ATIVO"
-                ? badgeStyles.success
-                : badgeStyles.warning),
+              ...(contrato.status === "ATIVO" ? badgeStyles.success : badgeStyles.warning),
             }}
           >
             {contrato.status}
@@ -176,86 +198,161 @@ export default function ContratoItens() {
 
       {/* ===== TABELA ===== */}
       <div style={layoutStyles.card}>
-        <table style={tableStyles.table}>
-          <thead>
-            <tr>
-              <th style={{ ...tableStyles.th, width: "34%" }}>Produto</th>
-              <th style={{ ...tableStyles.th, width: "10%" }}>Unidade</th>
-              <th style={{ ...tableStyles.th, width: "12%" }}>Fator</th>
-              <th style={{ ...tableStyles.th, width: "14%" }}>Preço (Contrato)</th>
-              <th style={{ ...tableStyles.th, width: "18%" }}>Qtd Contratada</th>
-              <th style={{ ...tableStyles.th, width: "12%" }}>Total</th>
-              <th style={{ ...tableStyles.th, width: "6%" }}></th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {contrato.itens.length === 0 && (
+        <div style={{ overflowX: "auto" }}>
+          <table
+            style={{
+              ...tableStyles.table,
+              tableLayout: "auto",
+              minWidth: 980, // ✅ evita “apertar” coluna de valores
+            }}
+          >
+            <thead>
               <tr>
-                <td
-                  colSpan={7}
-                  style={{
-                    ...tableStyles.td,
-                    textAlign: "center",
-                    padding: 20,
-                    color: "#0f172a",
-                  }}
-                >
-                  Nenhum item cadastrado para este contrato.
-                </td>
+                <th style={{ ...tableStyles.th, width: "44%" }}>Produto</th>
+                <th style={{ ...tableStyles.th, width: "14%" }}>Unid / Fator</th>
+                <th style={{ ...tableStyles.th, width: "22%" }}>Quantidades</th>
+                <th style={{ ...tableStyles.th, width: "16%" }}>Valores</th>
+                <th style={{ ...tableStyles.th, width: "4%" }}></th>
               </tr>
-            )}
+            </thead>
 
-            {contrato.itens.map((item) => {
-              const totalItem =
-                Number(item.preco_unitario_contratado) *
-                Number(item.qtd_maxima_contratada);
-
-              const totalEstoque =
-                Number(item.qtd_maxima_contratada) *
-                Number(item.fator_multiplicacao);
-
-              return (
-                <tr key={item.id}>
-                  <td style={tableStyles.td}>{item.produto?.nome ?? "—"}</td>
-
-                  <td style={tableStyles.td}>{item.unidade_contratada}</td>
-
-                  <td style={tableStyles.td}>
-                    <strong>{numeroBR(item.fator_multiplicacao, 0)}</strong>
-                    <span style={{ opacity: 0.6 }}> × estoque</span>
-                  </td>
-
-                  <td style={tableStyles.td}>
-                    {moedaBR(Number(item.preco_unitario_contratado))}
-                  </td>
-
-                  <td style={tableStyles.td}>
-                    <div>
-                      {numeroBR(item.qtd_maxima_contratada, 3)}{" "}
-                      {item.unidade_contratada}
-                    </div>
-                    <div style={{ fontSize: 12, opacity: 0.6 }}>
-                      = {numeroBR(totalEstoque, 0)} UN estoque
-                    </div>
-                  </td>
-
-                  <td style={tableStyles.td}>{moedaBR(totalItem)}</td>
-
-                  <td style={tableStyles.td}>
-                    <button
-                      style={{ ...buttonStyles.icon, color: "#dc2626" }}
-                      title="Remover item do contrato"
-                      onClick={() => removerItem(item.id)}
-                    >
-                      <FiTrash2 size={18} />
-                    </button>
+            <tbody>
+              {contrato.itens.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={5}
+                    style={{
+                      ...tableStyles.td,
+                      textAlign: "center",
+                      padding: 20,
+                      color: "#0f172a",
+                    }}
+                  >
+                    Nenhum item cadastrado para este contrato.
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              )}
+
+              {contrato.itens.map((item, idx) => {
+                const qtdContratada = toNumberAny(item.qtd_maxima_contratada);
+
+                const qtdUtilizada =
+                  item.qtd_utilizada !== undefined
+                    ? toNumberAny(item.qtd_utilizada)
+                    : toNumberAny(item.qtde_utilizada);
+
+                const saldoContrato =
+                  item.saldo_contrato !== undefined
+                    ? toNumberAny(item.saldo_contrato)
+                    : Math.max(0, qtdContratada - qtdUtilizada);
+
+                const precoUnit = toNumberAny(item.preco_unitario_contratado);
+                const totalItem = precoUnit * qtdContratada;
+
+                const fator = toNumberAny(item.fator_multiplicacao);
+                const totalEstoque = qtdContratada * fator;
+
+                const saldoBadgeStyle: React.CSSProperties =
+                  saldoContrato <= 0
+                    ? { background: "#fee2e2", color: "#991b1b", fontWeight: 900 }
+                    : { background: "#dcfce7", color: "#166534", fontWeight: 900 };
+
+                const rowBg = idx % 2 === 0 ? "#fff" : "#f9fafb";
+
+                return (
+                  <tr key={item.id} style={{ background: rowBg }}>
+                    {/* ✅ Produto com quebra garantida */}
+                    <td
+                      style={{
+                        ...tableStyles.td,
+                        whiteSpace: "normal",
+                        wordBreak: "break-word",
+                        overflowWrap: "anywhere",
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      <div style={cellTop}>{item.produto?.nome ?? "—"}</div>
+                      <div style={cellSub}>
+                        <span style={{ color: "#94a3b8" }}>Item contrato:</span> #{item.id}
+                      </div>
+                    </td>
+
+                    {/* ✅ Unid / Fator (2 linhas) */}
+                    <td style={tableStyles.td}>
+                      <div style={cellTop}>{item.unidade_contratada || "—"}</div>
+                      <div style={cellSub}>
+                        <span style={{ color: "#94a3b8" }}>Fator:</span>{" "}
+                        <strong style={{ color: "#0f172a" }}>{numeroBR(fator, 0)}</strong>
+                      </div>
+                      <div style={cellSub2}>
+                        <span style={{ color: "#94a3b8" }}>Estoque:</span> {numeroBR(totalEstoque, 0)} UN
+                      </div>
+                    </td>
+
+                    {/* ✅ Quantidades (3 “linhas”) */}
+                    <td style={tableStyles.td}>
+                      <div>
+                        <span style={{ color: "#94a3b8", fontSize: 12 }}>Contratada:</span>{" "}
+                        <strong style={{ color: "#0f172a" }}>
+                          {numeroBR(qtdContratada, 3)} {item.unidade_contratada}
+                        </strong>
+                      </div>
+
+                      <div style={cellSub}>
+                        <span style={{ color: "#94a3b8" }}>Utilizada:</span>{" "}
+                        {numeroBR(qtdUtilizada, 3)}
+                      </div>
+
+                      <div style={{ marginTop: 8 }}>
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "4px 10px",
+                            borderRadius: 999,
+                            fontSize: 12,
+                            ...saldoBadgeStyle,
+                          }}
+                          title={`Contratada: ${numeroBR(qtdContratada, 3)} • Utilizada: ${numeroBR(qtdUtilizada, 3)}`}
+                        >
+                          Saldo: {numeroBR(saldoContrato, 3)}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* ✅ Valores (2 “linhas”) - aqui resolve o “Total apertado” */}
+                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 10 }}>
+                      <div style={{ ...cellTop, fontSize: 13 }}>
+                        {moedaBR(precoUnit)}
+                      </div>
+                      <div style={cellSub}>
+                        <span style={{ color: "#94a3b8" }}>Preço unitário</span>
+                      </div>
+
+                      <div style={{ marginTop: 10, fontWeight: 900, fontSize: 15, color: "#0f172a" }}>
+                        {moedaBR(totalItem)}
+                      </div>
+                      <div style={cellSub}>
+                        <span style={{ color: "#94a3b8" }}>Total do item</span>
+                      </div>
+                    </td>
+
+                    {/* Ações */}
+                    <td style={{ ...tableStyles.td, textAlign: "center" }}>
+                      <button
+                        style={{ ...buttonStyles.icon, color: "#dc2626" }}
+                        title="Remover item do contrato"
+                        onClick={() => removerItem(item.id)}
+                      >
+                        <FiTrash2 size={18} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
 
         {/* ===== TOTAL ===== */}
         <div
@@ -273,7 +370,7 @@ export default function ContratoItens() {
             Total do Contrato
           </span>
 
-          <span style={{ fontSize: 18, fontWeight: 800, color: "#16a34a" }}>
+          <span style={{ fontSize: 18, fontWeight: 900, color: "#16a34a" }}>
             {moedaBR(totalContrato)}
           </span>
         </div>

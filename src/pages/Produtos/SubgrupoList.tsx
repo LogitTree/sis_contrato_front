@@ -1,20 +1,22 @@
-import { useEffect, useState } from 'react';
-import api from '../../api/api';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from "react";
+import api from "../../api/api";
+import { useNavigate } from "react-router-dom";
 
-import { layoutStyles } from '../../styles/layout';
-import { tableStyles } from '../../styles/table';
-import { buttonStyles } from '../../styles/buttons';
-import { filterStyles } from '../../styles/filters';
+import { layoutStyles } from "../../styles/layout";
+import { tableStyles } from "../../styles/table";
+import { buttonStyles } from "../../styles/buttons";
+import { filterStyles } from "../../styles/filters";
+import { fieldFocusHandlers } from "../../styles/focus";
 
+import { toast } from "react-toastify";
 import {
   FiEdit,
   FiTrash2,
   FiChevronLeft,
   FiChevronRight,
-} from 'react-icons/fi';
-
-import { toast } from 'react-toastify';
+  FiChevronUp,
+  FiChevronDown,
+} from "react-icons/fi";
 
 /* =========================
    Types
@@ -37,265 +39,248 @@ export default function SubgrupoList() {
   const [loading, setLoading] = useState(true);
 
   // filtros
-  const [filtroNome, setFiltroNome] = useState('');
+  const [filtroNome, setFiltroNome] = useState("");
+  const [debouncedFiltroNome, setDebouncedFiltroNome] = useState("");
 
   // ordenação
-  const [orderBy, setOrderBy] = useState<'id' | 'nome'>('id');
-  const [orderDir, setOrderDir] = useState<'ASC' | 'DESC'>('ASC');
+  const [sort, setSort] = useState<"id" | "nome">("id");
+  const [order, setOrder] = useState<"ASC" | "DESC">("ASC");
 
   // paginação
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [total, setTotal] = useState(0);
 
-async function carregarSubgrupos() {
-  setLoading(true);
+  const safeTotal = Number.isFinite(total) && total > 0 ? total : subgrupos.length;
+  const totalPages = Math.max(1, Math.ceil(safeTotal / limit));
 
-  try {
-    const res = await api.get('/subgrupos', {
-      params: {
-        page,
-        limit,
-        orderBy,
-        orderDir,
-        nome: filtroNome || undefined,
-      },
-    });
-
-    // 🔥 NORMALIZAÇÃO DO RETORNO
-    if (Array.isArray(res.data)) {
-      // backend retorna array simples
-      setSubgrupos(res.data);
-      setTotal(res.data.length);
-    } else {
-      // backend retorna { data, total }
-      setSubgrupos(res.data.data || []);
-      setTotal(res.data.total || 0);
-    }
-  } catch {
-    toast.error('Erro ao carregar subgrupos');
-    setSubgrupos([]);
-    setTotal(0);
-  } finally {
-    setLoading(false);
-  }
-}
-
-  useEffect(() => {
-    carregarSubgrupos();
-  }, []);
-
-  useEffect(() => {
-    setPage(1);
-    carregarSubgrupos();
-  }, [filtroNome, orderBy, orderDir]);
-
-  useEffect(() => {
-    carregarSubgrupos();
-  }, [page]);
-
-  function handleSort(coluna: 'id' | 'nome') {
-    if (orderBy === coluna) {
-      setOrderDir(prev => (prev === 'ASC' ? 'DESC' : 'ASC'));
-    } else {
-      setOrderBy(coluna);
-      setOrderDir('ASC');
+  function handleSort(column: typeof sort) {
+    if (sort === column) setOrder((prev) => (prev === "ASC" ? "DESC" : "ASC"));
+    else {
+      setSort(column);
+      setOrder("ASC");
     }
   }
+
+  function renderSortIcon(column: string) {
+    if (sort !== column) return null;
+    return order === "ASC" ? <FiChevronUp size={14} /> : <FiChevronDown size={14} />;
+  }
+
+  async function carregarSubgrupos() {
+    setLoading(true);
+
+    try {
+      const res = await api.get("/subgrupos", {
+        params: {
+          page,
+          limit,
+          orderBy: sort,
+          orderDir: order,
+          nome: debouncedFiltroNome || undefined,
+        },
+      });
+
+      // ✅ Normalização do retorno (array simples OU { data, total })
+      if (Array.isArray(res.data)) {
+        setSubgrupos(res.data);
+        setTotal(res.data.length);
+      } else {
+        setSubgrupos(res.data.data || []);
+        setTotal(res.data.total || 0);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("Erro ao carregar subgrupos");
+      setSubgrupos([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // debounce do texto (padrão empresas)
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedFiltroNome(filtroNome), 450);
+    return () => clearTimeout(timeout);
+  }, [filtroNome]);
+
+  // buscar ao mudar filtros/paginação/ordenação
+  useEffect(() => {
+    carregarSubgrupos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, debouncedFiltroNome, sort, order]);
+
+  // reset de página ao mudar filtros/ordenação
+  useEffect(() => setPage(1), [filtroNome, sort, order]);
 
   async function handleDelete(id: number) {
-    if (!window.confirm('Deseja excluir este subgrupo?')) return;
+    if (!window.confirm("Deseja excluir este subgrupo?")) return;
 
     try {
       await api.delete(`/subgrupos/${id}`);
-      toast.success('Subgrupo excluído');
+      toast.success("Subgrupo excluído");
       carregarSubgrupos();
-    } catch {
-      toast.error('Erro ao excluir subgrupo');
+    } catch (error) {
+      console.error(error);
+      toast.error("Erro ao excluir subgrupo");
     }
   }
-
-  const totalPages = Math.ceil(total / limit) || 1;
 
   return (
     <div style={layoutStyles.page}>
       {/* HEADER */}
       <div style={layoutStyles.header}>
-        <h1 style={layoutStyles.title}>Subgrupos</h1>
+        <div>
+          <h1 style={layoutStyles.title}>Subgrupos</h1>
+          <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
+            {loading ? "Carregando..." : `${safeTotal} registro(s) encontrado(s)`}
+          </div>
+        </div>
       </div>
 
-      {/* FILTRO */}
-      <div
-        style={{
-          ...layoutStyles.card,
-          padding: '12px 16px',
-          marginBottom: 12,
-          minHeight: 'unset',
-          height: 'auto',
-          flex: 'unset',
-        }}
-      >
-        <input
-          type="text"
-          placeholder="Buscar por nome"
-          value={filtroNome}
-          onChange={e => setFiltroNome(e.target.value)}
-          style={{
-            ...filterStyles.input,
-            height: 36,
-          }}
-        />
+      {/* FILTROS */}
+      <div style={layoutStyles.cardCompact}>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 16, width: "100%" }}>
+          {/* Busca ocupa tudo */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>
+              Nome do Subgrupo
+            </label>
+
+            <input
+              type="text"
+              placeholder="Buscar por nome"
+              value={filtroNome}
+              onChange={(e) => setFiltroNome(e.target.value)}
+              style={{ ...filterStyles.input, width: "100%" }}
+              {...fieldFocusHandlers}
+            />
+          </div>
+
+          {filtroNome && (
+            <button
+              style={{ ...buttonStyles.link, marginBottom: 2 }}
+              onClick={() => setFiltroNome("")}
+              title="Limpar filtros"
+            >
+              Limpar
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* ACTIONS */}
-      <div style={{ marginBottom: 16 }}>
-        <button
-          style={buttonStyles.primary}
-          onClick={() => navigate('/subgrupos/novo')}
-        >
-          + Novo Subgrupo
+      {/* BOTÕES ABAIXO DO FILTRO */}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, margin: "12px 0 16px" }}>
+        <button style={buttonStyles.link} onClick={() => navigate(-1)}>
+          Voltar
         </button>
 
-        <button
-          style={{ ...buttonStyles.link, marginLeft: 12 }}
-          onClick={() => navigate(-1)}
-        >
-          Voltar
+        <button style={buttonStyles.primary} onClick={() => navigate("/subgrupos/novo")}>
+          + Novo Subgrupo
         </button>
       </div>
 
       {/* TABELA */}
       <div style={layoutStyles.card}>
-        {loading ? (
-          <p>Carregando...</p>
-        ) : (
-          <>
-            <table style={tableStyles.table}>
-              <thead>
+        <div style={{ paddingBottom: 12, fontSize: 13, color: "#64748b" }}>
+          Exibindo {subgrupos.length} de {safeTotal} registro(s)
+        </div>
+
+        <div style={{ overflowX: "auto" }}>
+          <table style={tableStyles.table}>
+            <thead style={tableStyles.thead}>
+              <tr>
+                <th
+                  style={{ ...tableStyles.th, width: 90, cursor: "pointer" }}
+                  onClick={() => handleSort("id")}
+                >
+                  ID {renderSortIcon("id")}
+                </th>
+
+                <th
+                  style={{ ...tableStyles.th, cursor: "pointer" }}
+                  onClick={() => handleSort("nome")}
+                >
+                  Nome {renderSortIcon("nome")}
+                </th>
+
+                <th style={{ ...tableStyles.th, width: 120, textAlign: "center" }}>
+                  Ações
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {subgrupos.length === 0 && !loading && (
                 <tr>
-                  <th
-                    style={{ ...tableStyles.th, width: '10%', cursor: 'pointer' }}
-                    onClick={() => handleSort('id')}
-                  >
-                    ID {orderBy === 'id' && (orderDir === 'ASC' ? '▲' : '▼')}
-                  </th>
-
-                  <th
-                    style={{ ...tableStyles.th, cursor: 'pointer' }}
-                    onClick={() => handleSort('nome')}
-                  >
-                    Nome {orderBy === 'nome' && (orderDir === 'ASC' ? '▲' : '▼')}
-                  </th>
-
-                  <th
-                    style={{
-                      ...tableStyles.th,
-                      width: '15%',
-                      textAlign: 'center',
-                    }}
-                  >
-                    Ações
-                  </th>
+                  <td colSpan={3} style={{ textAlign: "center", padding: 20 }}>
+                    Nenhum subgrupo encontrado.
+                  </td>
                 </tr>
-              </thead>
+              )}
 
-              <tbody>
-                {subgrupos.length === 0 && (
-                  <tr>
-                    <td colSpan={3} style={{ textAlign: 'center', padding: 20 }}>
-                      Nenhum subgrupo encontrado
-                    </td>
-                  </tr>
-                )}
+              {subgrupos.map((sg, index) => (
+                <tr key={sg.id} style={tableStyles.row(index)}>
+                  <td style={tableStyles.td}>{sg.id}</td>
+                  <td style={{ ...tableStyles.td, ...tableStyles.tdWrap }}>{sg.nome}</td>
 
-                {subgrupos.map((sg, index) => (
-                  <tr
-                    key={sg.id}
-                    style={{
-                      background: index % 2 ? '#f9fafb' : '#fff',
-                    }}
-                  >
-                    <td style={tableStyles.td}>{sg.id}</td>
-                    <td style={tableStyles.td}>{sg.nome}</td>
-
-                    {/* AÇÕES */}
-                    <td
-                      style={{
-                        ...tableStyles.td,
-                        textAlign: 'center',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'center',
-                          gap: 8,
-                        }}
+                  <td style={{ ...tableStyles.td, textAlign: "center" }}>
+                    <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                      <button
+                        title="Editar"
+                        style={buttonStyles.icon}
+                        onClick={() => navigate(`/subgrupos/${sg.id}/editar`)}
+                        onMouseEnter={(ev) =>
+                          (ev.currentTarget.style.background = "rgba(37,99,235,0.08)")
+                        }
+                        onMouseLeave={(ev) => (ev.currentTarget.style.background = "transparent")}
                       >
-                        <button
-                          title="Editar"
-                          style={{
-                            ...buttonStyles.icon,
-                            color: '#2563eb',
-                          }}
-                          onClick={() =>
-                            navigate(`/subgrupos/${sg.id}/editar`)
-                          }
-                        >
-                          <FiEdit size={18} />
-                        </button>
+                        <FiEdit size={18} color="#2563eb" />
+                      </button>
 
-                        <button
-                          title="Excluir"
-                          style={{
-                            ...buttonStyles.icon,
-                            color: '#dc2626',
-                          }}
-                          onClick={() => handleDelete(sg.id)}
-                        >
-                          <FiTrash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      <button
+                        title="Excluir"
+                        style={buttonStyles.icon}
+                        onClick={() => handleDelete(sg.id)}
+                        onMouseEnter={(ev) =>
+                          (ev.currentTarget.style.background = "rgba(220,38,38,0.08)")
+                        }
+                        onMouseLeave={(ev) => (ev.currentTarget.style.background = "transparent")}
+                      >
+                        <FiTrash2 size={18} color="#dc2626" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-            {/* PAGINAÇÃO */}
-            {subgrupos.length > 0 && (
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  gap: 12,
-                  marginTop: 16,
-                }}
-              >
-                <button
-                  disabled={page === 1}
-                  onClick={() => setPage(p => p - 1)}
-                  style={buttonStyles.paginationButtonStyle(page === 1)}
-                >
-                  <FiChevronLeft size={20} />
-                </button>
+        {/* PAGINAÇÃO */}
+        {totalPages > 1 && (
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginTop: 16 }}>
+            <button
+              disabled={page === 1}
+              onClick={() => setPage((prev) => prev - 1)}
+              style={buttonStyles.paginationButtonStyle(page === 1)}
+            >
+              <FiChevronLeft size={20} />
+            </button>
 
-                <span style={{ fontWeight: 600 }}>
-                  Página {page} de {totalPages}
-                </span>
+            <span style={{ fontWeight: 600, minWidth: 90, textAlign: "center" }}>
+              Página {page} de {totalPages}
+            </span>
 
-                <button
-                  disabled={page >= totalPages}
-                  onClick={() => setPage(p => p + 1)}
-                  style={buttonStyles.paginationButtonStyle(page >= totalPages)}
-                >
-                  <FiChevronRight size={20} />
-                </button>
-              </div>
-            )}
-          </>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage((prev) => prev + 1)}
+              style={buttonStyles.paginationButtonStyle(page >= totalPages)}
+            >
+              <FiChevronRight size={20} />
+            </button>
+          </div>
         )}
       </div>
     </div>
