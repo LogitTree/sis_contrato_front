@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { layoutStyles } from "../styles/layout";
+import { useAuth } from "../contexts/AuthContext";
 
 import {
   ResponsiveContainer,
@@ -30,6 +31,13 @@ type UltimoContrato = {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+
+  const { user, logout } = useAuth(); // ✅ add
+
+  function handleLogout() {
+    logout();
+    navigate("/login", { replace: true });
+  }
 
   /* =========================
      MOCK DATA (simulação)
@@ -307,6 +315,60 @@ export default function Dashboard() {
           <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
             Visão geral do sistema.
           </div>
+        </div>
+
+        {/* ✅ Usuário logado + sair */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              lineHeight: 1.2,
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 900, color: "#0f172a" }}>
+              {user?.nome || "—"}
+              {user?.perfil ? (
+                <span
+                  style={{
+                    marginLeft: 8,
+                    fontSize: 11,
+                    fontWeight: 900,
+                    padding: "3px 10px",
+                    borderRadius: 999,
+                    border: "1px solid #e2e8f0",
+                    background: "#f8fafc",
+                    color: "#334155",
+                  }}
+                >
+                  {user.perfil}
+                </span>
+              ) : null}
+            </div>
+
+            <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
+              {user?.email || ""}
+            </div>
+          </div>
+
+          <button
+            onClick={handleLogout}
+            style={{
+              height: 36,
+              padding: "0 12px",
+              borderRadius: 10,
+              border: "1px solid #e5e7eb",
+              background: "#fff",
+              fontWeight: 900,
+              fontSize: 13,
+              color: "#0f172a",
+              cursor: "pointer",
+            }}
+            title="Sair"
+          >
+            Sair
+          </button>
         </div>
       </div>
 

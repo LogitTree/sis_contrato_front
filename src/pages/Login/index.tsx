@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 
 import { filterStyles } from "../../styles/filters";
@@ -8,6 +8,7 @@ import { buttonStyles } from "../../styles/buttons";
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const emailRef = useRef<HTMLInputElement | null>(null);
 
@@ -16,8 +17,12 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ✅ volta pra rota que tentou acessar
+  const from = ((location.state as any)?.from?.pathname as string) || "/";
+
   useEffect(() => {
-    setTimeout(() => emailRef.current?.focus(), 50);
+    const t = setTimeout(() => emailRef.current?.focus(), 50);
+    return () => clearTimeout(t);
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -27,7 +32,7 @@ export default function Login() {
 
     try {
       await login(email, senha);
-      navigate("/", { replace: true });
+      navigate(from, { replace: true }); // ✅ aqui era "/"
     } catch (err: any) {
       setError(err?.response?.data?.error || "E-mail ou senha inválidos.");
     } finally {
@@ -42,7 +47,7 @@ export default function Login() {
     alignItems: "center",
     justifyContent: "center",
     padding: 16,
-    background: "#f6f7fb", // ✅ padrão mais “sistema”
+    background: "#f6f7fb",
   };
 
   const cardStyle: React.CSSProperties = {
@@ -100,17 +105,14 @@ export default function Login() {
   return (
     <div style={wrapperStyle}>
       <form onSubmit={handleSubmit} style={cardStyle}>
-        {/* Header do card (padrão sistema) */}
         <div style={cardHeaderStyle}>
           <div style={titleStyle}>Acesso ao Sistema</div>
           <div style={subtitleStyle}>Informe suas credenciais para continuar</div>
         </div>
 
         <div style={cardBodyStyle}>
-          {/* Erro */}
           {error && <div style={errorBoxStyle}>{error}</div>}
 
-          {/* Campos */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <label style={labelStyle}>E-mail</label>
@@ -153,7 +155,6 @@ export default function Login() {
               />
             </div>
 
-            {/* Botão */}
             <button
               type="submit"
               style={{
@@ -169,7 +170,6 @@ export default function Login() {
               {loading ? "Entrando..." : "Entrar"}
             </button>
 
-            {/* Rodapé do card */}
             <div style={{ marginTop: 6, textAlign: "center", fontSize: 12, color: "#94a3b8" }}>
               © {new Date().getFullYear()} • Sistema de Contratos
             </div>
