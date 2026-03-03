@@ -24,10 +24,16 @@ import ContratosList from "../pages/Contratos/List";
 import ContratoCreate from "../pages/Contratos/Create";
 import ContratoEdit from "../pages/Contratos/Edit";
 import ContratoItens from "../pages/Contratos/ContratoItens";
-import PedidoVenda from "../pages/PedidoVenda/List";
 import Login from "../pages/Login";
+import PedidoVenda from "../pages/PedidoVenda/List";
 import PedidoVendaCreate from "../pages/PedidoVenda/Create";
 import PedidoVendaEdit from "../pages/PedidoVenda/Edit";
+import Compra from "../pages/Compras/List";
+import CompraCreate from "../pages/Compras/Create";
+import CompraEdit from "../pages/Compras/Edit";
+import Fornecedor from "../pages/Fornecedores/List";
+import FornecedorCreate from "../pages/Fornecedores/Create";
+import FornecedorEdit from "../pages/Fornecedores/Edit";
 
 export default function AppRoutes() {
   return (
@@ -70,6 +76,14 @@ export default function AppRoutes() {
               <Route path="/pedidosvenda" element={<PedidoVenda />} />
               <Route path="/pedidosvenda/novo" element={<PedidoVendaCreate />} />
               <Route path="/pedidosvenda/:id/editar" element={<PedidoVendaEdit />} />
+
+              <Route path="/compras" element={<Compra />} />
+              <Route path="/compras/novo" element={<CompraCreate />} />
+              <Route path="/compras/:id/editar" element={<CompraEdit />} />
+
+              <Route path="/fornecedores" element={<Fornecedor />} />
+              <Route path="/fornecedores/novo" element={<FornecedorCreate />} />
+              <Route path="/fornecedores/:id/editar" element={<FornecedorEdit />} />
             </Route>
           </Route>
 

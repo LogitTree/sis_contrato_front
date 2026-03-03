@@ -9,7 +9,7 @@ import { buttonStyles } from "../../styles/buttons";
 import { badgeStyles } from "../../styles/badges";
 import { filterStyles } from "../../styles/filters";
 
-import { FiEdit, FiTrash2, FiList, FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import { FiEdit, FiTrash2, FiList, FiChevronLeft, FiChevronRight, FiPrinter } from "react-icons/fi";
 import { formatarDataBR } from "../../utils/masks";
 import { toast } from "react-toastify";
 
@@ -53,6 +53,26 @@ export default function ContratosList() {
 
     return badgeStyles.base;
   };
+
+  async function imprimirRelatorio(contratoId: number) {
+    try {
+      const res = await api.get(`/contratos/${contratoId}/relatorio`, {
+        responseType: "blob",
+      });
+
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+
+      // abre em nova aba
+      window.open(url, "_blank", "noopener,noreferrer");
+
+      // libera memória depois de um tempo
+      setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+    } catch (error) {
+      console.error(error);
+      toast.error("Erro ao gerar relatório");
+    }
+  }
 
   async function carregarContratos() {
     setLoading(true);
@@ -353,6 +373,16 @@ export default function ContratosList() {
                         onMouseLeave={(ev) => (ev.currentTarget.style.background = "transparent")}
                       >
                         <FiList size={18} color="#111827" />
+                      </button>
+
+                      <button
+                        style={buttonStyles.icon}
+                        onClick={() => imprimirRelatorio(c.id)}
+                        title="Imprimir relatório executivo"
+                        onMouseEnter={(ev) => (ev.currentTarget.style.background = "rgba(16,185,129,0.10)")}
+                        onMouseLeave={(ev) => (ev.currentTarget.style.background = "transparent")}
+                      >
+                        <FiPrinter size={18} color="#059669" />
                       </button>
                     </div>
                   </td>

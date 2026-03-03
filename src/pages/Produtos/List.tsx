@@ -29,7 +29,7 @@ export default function ProdutosList() {
   const navigate = useNavigate();
 
   // =========================
-  // Formatação de valores (BRL)
+  // Formatação de valores (BRL) + parse robusto (BR / US / centavos)
   // =========================
   const brl = new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -38,29 +38,56 @@ export default function ProdutosList() {
     maximumFractionDigits: 2,
   });
 
-  function toNumber(value: unknown): number | null {
+  function toNumberAny(value: unknown): number | null {
     if (value === null || value === undefined) return null;
-    if (typeof value === "number") return Number.isFinite(value) ? value : null;
+
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : null;
+    }
 
     if (typeof value === "string") {
-      const trimmed = value.trim();
-      if (!trimmed) return null;
+      let s = value.trim();
+      if (!s) return null;
 
-      // aceita "1.234,56" / "1234,56" / "1234.56" / "R$ 1.234,56"
-      const normalized = trimmed
-        .replace(/[R$\s]/g, "")
-        .replace(/\./g, "")
-        .replace(",", ".");
+      // remove "R$" e espaços
+      s = s.replace(/R\$\s?/g, "").replace(/\s/g, "");
 
-      const n = Number(normalized);
+      const hasComma = s.includes(",");
+      const hasDot = s.includes(".");
+
+      // "1.234,56" (BR) => remove milhar e troca vírgula
+      if (hasComma && hasDot) {
+        const n = Number(s.replace(/\./g, "").replace(",", "."));
+        return Number.isFinite(n) ? n : null;
+      }
+
+      // "1234,56" (BR) => troca vírgula
+      if (hasComma) {
+        const n = Number(s.replace(",", "."));
+        return Number.isFinite(n) ? n : null;
+      }
+
+      // "1234.56" (US) => mantém ponto decimal
+      const n = Number(s);
       return Number.isFinite(n) ? n : null;
     }
 
     return null;
   }
 
+  // regra “centavos” (igual seu backend)
+  function moneyFromApi(value: unknown): number | null {
+    const n = toNumberAny(value);
+    if (n === null) return null;
+
+    const isInt = Math.abs(n - Math.round(n)) < 1e-9;
+    if (isInt && n >= 100000) return n / 100;
+
+    return n;
+  }
+
   function formatMoney(value: unknown): string {
-    const n = toNumber(value);
+    const n = moneyFromApi(value);
     if (n === null) return "-";
     return brl.format(n);
   }
@@ -80,10 +107,19 @@ export default function ProdutosList() {
 
     try {
       const res = await api.get("/produtos", { params });
-      setProdutos(res.data.data);
-      setTotal(res.data.total);
-    } catch {
+
+      const data = res.data?.data ?? [];
+      setProdutos(Array.isArray(data) ? data : []);
+      setTotal(Number(res.data?.total) || 0);
+
+      // ✅ debug rápido (remova depois)
+      // console.log("Exemplo preco_referencia:", data?.[0]?.preco_referencia);
+      // console.log("Exemplo custo_medio:", data?.[0]?.custo_medio);
+    } catch (err) {
+      console.error(err);
       toast.error("Erro ao carregar produtos");
+      setProdutos([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -127,25 +163,28 @@ export default function ProdutosList() {
       await api.delete(`/produtos/${id}`);
       toast.success("Produto excluído com sucesso");
       carregarProdutos();
-    } catch {
+    } catch (err) {
+      console.error(err);
       toast.error("Erro ao excluir produto");
     }
   }
 
-  const totalPages = Math.ceil(total / limit);
+  const totalPages = Math.max(1, Math.ceil((Number(total) || 0) / limit));
 
   return (
     <div style={layoutStyles.page}>
       {/* HEADER */}
       <div style={layoutStyles.header}>
         <h1 style={layoutStyles.title}>Produtos</h1>
-        <div style={{ fontSize: 13, color: "#64748b" }}>{total} produto(s) encontrado(s)</div>
+        <div style={{ fontSize: 13, color: "#64748b" }}>
+          {loading ? "Carregando..." : `${total} produto(s) encontrado(s)`}
+        </div>
       </div>
 
       {/* FILTROS */}
       <div style={layoutStyles.cardCompact}>
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 16, width: "100%" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 16, width: "100%", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 260 }}>
             <label style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>Nome</label>
             <input
               type="text"
@@ -162,7 +201,7 @@ export default function ProdutosList() {
             />
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220, minWidth: 220 }}>
             <label style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>Status</label>
             <select
               value={filtroStatus}
@@ -187,6 +226,7 @@ export default function ProdutosList() {
               onClick={() => {
                 setFiltroNome("");
                 setFiltroStatus("");
+                setPage(1);
               }}
               disabled={loading}
               title="Limpar filtros"
@@ -291,7 +331,7 @@ export default function ProdutosList() {
 
                   <td style={tableStyles.td}>{p.unidade}</td>
 
-                  {/* ✅ VALORES FORMATADOS */}
+                  {/* ✅ VALORES FORMATADOS (robusto BR/US/centavos) */}
                   <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>
                     {formatMoney((p as any).preco_referencia)}
                   </td>

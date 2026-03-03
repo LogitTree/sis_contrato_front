@@ -29,6 +29,7 @@ export default function Sidebar() {
       isActive("/orgaos") ||
       isActive("/produtos") ||
       isActive("/grupos") ||
+      isActive("/fornecedores") ||
       isActive("/subgrupos"),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [location.pathname]
@@ -102,6 +103,7 @@ export default function Sidebar() {
                 {[
                   { path: "/empresas", label: "Empresas", icon: <FiBriefcase size={16} /> },
                   { path: "/orgaos", label: "Órgãos", icon: <FiUsers size={16} /> },
+                  { path: "/fornecedores", label: "Fornecedores", icon: <FiUsers size={16} /> },
                   { path: "/produtos", label: "Produtos", icon: <FiBox size={16} /> },
                   { path: "/grupos", label: "Grupo de produtos", icon: <FiBox size={16} /> },
                   { path: "/subgrupos", label: "Subgrupo de produtos", icon: <FiBox size={16} /> },
@@ -164,6 +166,25 @@ export default function Sidebar() {
           >
             <FiShoppingCart size={18} />
             Vendas
+          </div>
+        );
+      })()}
+
+      {/* Compras */}
+      {(() => {
+        const active = isActive("/compras");
+        return (
+          <div
+            style={{
+              ...sidebarStyles.menuItem,
+              ...(active ? sidebarStyles.activeItem : {}),
+            }}
+            onMouseEnter={onHover(active)}
+            onMouseLeave={onLeave(active)}
+            onClick={() => navigate("/compras")}
+          >
+            <FiShoppingCart size={18} />
+            Compras
           </div>
         );
       })()}

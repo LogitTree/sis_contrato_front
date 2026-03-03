@@ -8,7 +8,7 @@ import { buttonStyles } from "../../styles/buttons";
 import { tableStyles } from "../../styles/table";
 import { filterStyles } from "../../styles/filters";
 
-import { FiTrash2 } from "react-icons/fi";
+import { FiTrash2, FiCheckCircle, FiXCircle } from "react-icons/fi";
 
 type ContratoOption = {
   id: number;
@@ -33,7 +33,7 @@ type PedidoItem = {
   produto_id: number;
   qtd: string;
   preco_unitario: string;
-  aprovado?: boolean;
+  aprovado?: boolean | null;
   motivo_bloqueio?: string | null;
 
   produto?: { nome?: string };
@@ -114,6 +114,62 @@ export default function PedidoVendaEdit() {
 
   const qtdRef = useRef<HTMLInputElement | null>(null);
 
+  // ====== APROVAÇÃO / REPROVAÇÃO ======
+  const [togglingItemId, setTogglingItemId] = useState<number | null>(null);
+  const [motivoModalOpen, setMotivoModalOpen] = useState(false);
+  const [motivoTexto, setMotivoTexto] = useState("");
+  const [itemParaReprovar, setItemParaReprovar] = useState<PedidoItem | null>(null);
+
+  function openReprovarModal(item: PedidoItem) {
+    setItemParaReprovar(item);
+    setMotivoTexto(item.motivo_bloqueio || "");
+    setMotivoModalOpen(true);
+  }
+
+  function closeReprovarModal() {
+    setMotivoModalOpen(false);
+    setItemParaReprovar(null);
+    setMotivoTexto("");
+  }
+
+  async function handleAprovarItem(itemId: number) {
+    if (!pedidoId) return;
+
+    setTogglingItemId(itemId);
+    try {
+      await api.post(`/pedidosvenda/${pedidoId}/itens/${itemId}/aprovar`);
+      toast.success("Item aprovado");
+      await loadPedidoAndFill();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.response?.data?.error || "Erro ao aprovar item");
+    } finally {
+      setTogglingItemId(null);
+    }
+  }
+
+  async function handleReprovarItem(itemId: number, motivo: string) {
+    if (!pedidoId) return;
+
+    if (!motivo?.trim()) {
+      toast.error("Informe o motivo da reprovação");
+      return;
+    }
+
+    setTogglingItemId(itemId);
+    try {
+      await api.post(`/pedidosvenda/${pedidoId}/itens/${itemId}/reprovar`, { motivo });
+      toast.success("Item reprovado");
+      closeReprovarModal();
+      await loadPedidoAndFill();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.response?.data?.error || "Erro ao reprovar item");
+    } finally {
+      setTogglingItemId(null);
+    }
+  }
+
   const helperLineStyle: React.CSSProperties = {
     marginTop: 8,
     fontSize: 12,
@@ -189,11 +245,9 @@ export default function PedidoVendaEdit() {
       return;
     }
 
-    // ✅ seu backend retorna o objeto DIRETO (igual você mostrou)
     const res = await api.get(`/pedidosvenda/${pedidoId}`);
     const pedido = res.data;
 
-    // ✅ header
     const contrato_id = pedido?.contrato_id ?? "";
     const dataApi = pedido?.data ?? "";
     const obsApi = pedido?.observacao ?? "";
@@ -202,7 +256,6 @@ export default function PedidoVendaEdit() {
     setData(String(dataApi).slice(0, 10));
     setObservacao(obsApi === null || obsApi === undefined ? "" : String(obsApi));
 
-    // ✅ itens
     setItens(Array.isArray(pedido?.itens) ? pedido.itens : []);
   }
 
@@ -212,7 +265,6 @@ export default function PedidoVendaEdit() {
       try {
         setLoading(true);
 
-        // ✅ reset (evita “sumir/ficar travado” ao trocar id)
         setContratoId("");
         setData("");
         setObservacao("");
@@ -234,7 +286,7 @@ export default function PedidoVendaEdit() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pedidoId]);
 
-  // quando contratoId muda (inclusive vindo do pedido), carrega itens do contrato
+  // quando contratoId muda, carrega itens do contrato
   useEffect(() => {
     const id = Number(contratoId);
     if (!id) {
@@ -251,7 +303,6 @@ export default function PedidoVendaEdit() {
       setContratoItensOptions([]);
     });
 
-    // reseta SOMENTE o form de inserir item
     setContratoItemId("");
     setProdutoId("");
     setQtd("");
@@ -346,9 +397,7 @@ export default function PedidoVendaEdit() {
     if (!qtdN || qtdN <= 0) return toast.error("Informe a quantidade");
     if (qtdExcedeMax) return toast.error("Quantidade excede o máximo contratado (no pedido).");
 
-    const precoContrato = contratoItemSelecionado
-      ? moneyFromApi(contratoItemSelecionado.preco_unitario_contratado)
-      : 0;
+    const precoContrato = contratoItemSelecionado ? moneyFromApi(contratoItemSelecionado.preco_unitario_contratado) : 0;
     if (!precoContrato || precoContrato <= 0) return toast.error("Preço do contrato inválido");
 
     setSavingItem(true);
@@ -396,17 +445,10 @@ export default function PedidoVendaEdit() {
   const disableHeader = loading || savingHeader;
   const disableItem = loading || savingItem;
 
-  const precoContratoAtual = contratoItemSelecionado
-    ? moneyFromApi(contratoItemSelecionado.preco_unitario_contratado)
-    : 0;
+  const precoContratoAtual = contratoItemSelecionado ? moneyFromApi(contratoItemSelecionado.preco_unitario_contratado) : 0;
 
   const canInsert =
-    !disableItem &&
-    !!contratoItemId &&
-    !!qtd &&
-    toNumberAny(qtd) > 0 &&
-    !qtdExcedeMax &&
-    !!contratoItemSelecionado;
+    !disableItem && !!contratoItemId && !!qtd && toNumberAny(qtd) > 0 && !qtdExcedeMax && !!contratoItemSelecionado;
 
   const itemGridStyle: React.CSSProperties = {
     display: "grid",
@@ -631,10 +673,10 @@ export default function PedidoVendaEdit() {
                   type="button"
                   style={{
                     ...buttonStyles.primary,
-                    height: 36,               // um pouco menor
-                    padding: "0 12px",        // menos padding lateral
-                    width: 150,               // largura fixa menor
-                    alignSelf: "flex-start",  // evita ocupar a coluna toda
+                    height: 36,
+                    padding: "0 12px",
+                    width: 150,
+                    alignSelf: "flex-start",
                     whiteSpace: "nowrap",
                   }}
                   onClick={handleAddItem}
@@ -661,7 +703,7 @@ export default function PedidoVendaEdit() {
                 <th style={{ ...tableStyles.th, width: 170, textAlign: "right" }}>PREÇO UNIT.</th>
                 <th style={{ ...tableStyles.th, width: 190, textAlign: "right" }}>SUBTOTAL</th>
                 <th style={{ ...tableStyles.th, width: 130, textAlign: "center" }}>APROVADO</th>
-                <th style={{ ...tableStyles.th, width: 90, textAlign: "center" }}>AÇÕES</th>
+                <th style={{ ...tableStyles.th, width: 160, textAlign: "center" }}>AÇÕES</th>
               </tr>
             </thead>
 
@@ -682,6 +724,14 @@ export default function PedidoVendaEdit() {
                 const option = contratoItensOptions.find((x) => x.id === it.contrato_item_id);
                 const unid = option?.unidade_contratada ?? "UN";
                 const nome = it.produto?.nome || option?.produtoNome || `Produto #${it.produto_id}`;
+
+                const aprovadoLabel = it.aprovado === true ? "SIM" : it.aprovado === false ? "NÃO" : "PENDENTE";
+                const aprovadoStyle =
+                  it.aprovado === true
+                    ? { background: "#dcfce7", color: "#166534" }
+                    : it.aprovado === false
+                    ? { background: "#fee2e2", color: "#991b1b" }
+                    : { background: "#fef9c3", color: "#854d0e" };
 
                 return (
                   <tr key={it.id} style={{ background: idx % 2 === 0 ? "#fff" : "#f9fafb" }}>
@@ -706,25 +756,44 @@ export default function PedidoVendaEdit() {
                           padding: "4px 10px",
                           borderRadius: 6,
                           fontSize: 12,
-                          fontWeight: 700,
+                          fontWeight: 800,
                           display: "inline-block",
-                          background: it.aprovado ? "#dcfce7" : "#fef9c3",
-                          color: it.aprovado ? "#166534" : "#854d0e",
+                          ...aprovadoStyle,
                         }}
                       >
-                        {it.aprovado ? "SIM" : "NÃO"}
+                        {aprovadoLabel}
                       </span>
                     </td>
 
                     <td style={{ ...tableStyles.td, textAlign: "center" }}>
-                      <button
-                        style={{ ...buttonStyles.icon, opacity: removingItemId === it.id ? 0.6 : 1 }}
-                        onClick={() => handleRemoveItem(it.id)}
-                        disabled={removingItemId === it.id}
-                        title="Remover item"
-                      >
-                        <FiTrash2 size={18} color="#dc2626" />
-                      </button>
+                      <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                        <button
+                          style={{ ...buttonStyles.icon, opacity: togglingItemId === it.id ? 0.6 : 1 }}
+                          onClick={() => handleAprovarItem(it.id)}
+                          disabled={togglingItemId === it.id}
+                          title="Aprovar item"
+                        >
+                          <FiCheckCircle size={18} color="#16a34a" />
+                        </button>
+
+                        <button
+                          style={{ ...buttonStyles.icon, opacity: togglingItemId === it.id ? 0.6 : 1 }}
+                          onClick={() => openReprovarModal(it)}
+                          disabled={togglingItemId === it.id}
+                          title="Reprovar item"
+                        >
+                          <FiXCircle size={18} color="#dc2626" />
+                        </button>
+
+                        <button
+                          style={{ ...buttonStyles.icon, opacity: removingItemId === it.id ? 0.6 : 1 }}
+                          onClick={() => handleRemoveItem(it.id)}
+                          disabled={removingItemId === it.id}
+                          title="Remover item"
+                        >
+                          <FiTrash2 size={18} color="#dc2626" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -747,6 +816,77 @@ export default function PedidoVendaEdit() {
           </button>
         </div>
       </div>
+
+      {/* MODAL REPROVAR */}
+      {motivoModalOpen && itemParaReprovar && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15,23,42,.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 50,
+          }}
+          onClick={closeReprovarModal}
+        >
+          <div
+            style={{
+              width: "min(560px, 100%)",
+              background: "#fff",
+              borderRadius: 14,
+              padding: 16,
+              boxShadow: "0 20px 50px rgba(0,0,0,.18)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+              <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a" }}>
+                Reprovar item #{itemParaReprovar.id}
+              </div>
+              <button style={buttonStyles.link} onClick={closeReprovarModal}>
+                Fechar
+              </button>
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 13, color: "#64748b" }}>
+              Informe o motivo. Isso vai aparecer abaixo do produto.
+            </div>
+
+            <div style={{ marginTop: 12 }}>
+              <textarea
+                value={motivoTexto}
+                onChange={(e) => setMotivoTexto(e.target.value)}
+                placeholder="Ex: saldo insuficiente, margem mínima não atingida, estoque indisponível..."
+                style={{
+                  ...filterStyles.input,
+                  width: "100%",
+                  height: 120,
+                  padding: "10px 12px",
+                  resize: "vertical",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 12 }}>
+              <button style={buttonStyles.link} onClick={closeReprovarModal}>
+                Cancelar
+              </button>
+
+              <button
+                style={buttonStyles.primary}
+                onClick={() => handleReprovarItem(itemParaReprovar.id, motivoTexto)}
+                disabled={togglingItemId === itemParaReprovar.id}
+              >
+                {togglingItemId === itemParaReprovar.id ? "Salvando..." : "Reprovar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
