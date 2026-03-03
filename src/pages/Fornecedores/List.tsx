@@ -21,12 +21,12 @@ function pickListResponse(resData: any) {
   return { data: [], total: 0 };
 }
 
-function pickSort(sort: any, order: any, orderBy: any, orderDir: any, allowed: string[]) {
+/*function pickSort(sort: any, order: any, orderBy: any, orderDir: any, allowed: string[]) {
   const col = String(orderBy || sort || "");
   const dir = String(orderDir || order || "DESC").toUpperCase() === "ASC" ? "ASC" : "DESC";
   if (!allowed.includes(col)) return { col: "id", dir: "DESC" as const };
   return { col, dir: dir as "ASC" | "DESC" };
-}
+}*/
 
 export default function FornecedoresList() {
   const navigate = useNavigate();
