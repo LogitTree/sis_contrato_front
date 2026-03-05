@@ -19,7 +19,7 @@ export default function ProdutosList() {
   const [filtroStatus, setFiltroStatus] = useState("");
 
   // ✅ Ordenação só do que faz sentido na tabela atual
-  const [orderBy, setOrderBy] = useState<"id" | "nome">("id");
+  const [orderBy, setOrderBy] = useState<"id" | "nome">("nome");
   const [orderDir, setOrderDir] = useState<"ASC" | "DESC">("ASC");
 
   const [page, setPage] = useState(1);
