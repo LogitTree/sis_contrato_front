@@ -7,7 +7,7 @@ import { layoutStyles } from "../../styles/layout";
 import { buttonStyles } from "../../styles/buttons";
 import { tableStyles } from "../../styles/table";
 
-import { FiEdit, FiPackage, FiXCircle, FiRotateCcw } from "react-icons/fi";
+import { FiEdit, FiPackage, FiRotateCcw } from "react-icons/fi";
 
 type CompraStatus =
   | "ABERTA"

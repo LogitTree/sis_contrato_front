@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../../api/api";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
