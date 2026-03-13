@@ -11,6 +11,12 @@ import { tableStyles } from "../../styles/table";
 
 import { FiTrash2 } from "react-icons/fi";
 
+type CompraStatus =
+  | "ABERTA"
+  | "PARCIALMENTE_RECEBIDA"
+  | "RECEBIDA"
+  | "CANCELADA";
+
 type FornecedorOption = { id: number; nome: string };
 type ProdutoOption = { id: number; nome?: string; descricao?: string; nome_fantasia?: string };
 
@@ -33,7 +39,6 @@ function pickListArray(resData: any): any[] {
   return [];
 }
 
-/** Converte strings BR/US para número (IGUAL AO CREATE) */
 function toNumberAny(v: any): number {
   if (v === null || v === undefined) return 0;
   const s = String(v).trim();
@@ -58,10 +63,17 @@ function toNumberAny(v: any): number {
 }
 
 function formatMoneyBR(n: number) {
-  return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
+
 function formatQtyBR(n: number) {
-  return n.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  return n.toLocaleString("pt-BR", {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  });
 }
 
 function formatDateISO(value: any): string {
@@ -75,7 +87,6 @@ function formatDateISO(value: any): string {
   return `${y}-${m}-${day}`;
 }
 
-/** permite digitar decimal com vírgula/ponto, mas guarda normalizado */
 function normalizeDecimalString(v: string) {
   const clean = (v || "").replace(/[^\d.,]/g, "");
   const hasComma = clean.includes(",");
@@ -90,6 +101,22 @@ function nomeProduto(p?: ProdutoOption | null) {
   return p.nome ?? p.descricao ?? p.nome_fantasia ?? `Produto #${p.id}`;
 }
 
+function normalizeCompraStatus(value: any): CompraStatus {
+  const s = String(value || "ABERTA").toUpperCase();
+
+  if (s === "PARCIALMENTE_RECEBIDA") return "PARCIALMENTE_RECEBIDA";
+  if (s === "RECEBIDA") return "RECEBIDA";
+  if (s === "CANCELADA") return "CANCELADA";
+  return "ABERTA";
+}
+
+function getStatusColor(status: CompraStatus) {
+  if (status === "RECEBIDA") return "#166534";
+  if (status === "PARCIALMENTE_RECEBIDA") return "#92400e";
+  if (status === "CANCELADA") return "#991b1b";
+  return "#1e40af";
+}
+
 export default function ComprasEdit() {
   const navigate = useNavigate();
   const params = useParams();
@@ -97,13 +124,11 @@ export default function ComprasEdit() {
 
   const [loading, setLoading] = useState(true);
 
-  // ===== Cabeçalho =====
   const [fornecedorId, setFornecedorId] = useState("");
   const [dataPedido, setDataPedido] = useState("");
   const [observacao, setObservacao] = useState("");
-  const [status, setStatus] = useState<"ABERTA" | "RECEBIDA" | "CANCELADA">("ABERTA");
+  const [status, setStatus] = useState<CompraStatus>("ABERTA");
 
-  // ✅ novos campos (backend)
   const [numeroNF, setNumeroNF] = useState("");
   const [serieNF, setSerieNF] = useState("");
   const [dataEmissaoNF, setDataEmissaoNF] = useState("");
@@ -120,15 +145,12 @@ export default function ComprasEdit() {
   const [savingItem, setSavingItem] = useState(false);
   const [removingItemId, setRemovingItemId] = useState<number | null>(null);
 
-  // ===== Combos =====
   const [fornecedores, setFornecedores] = useState<FornecedorOption[]>([]);
   const [produtos, setProdutos] = useState<ProdutoOption[]>([]);
   const produtosMap = useMemo(() => new Map(produtos.map((p) => [p.id, p])), [produtos]);
 
-  // ===== Itens =====
   const [itens, setItens] = useState<CompraItem[]>([]);
 
-  // ===== Form inserir item =====
   const [produtoId, setProdutoId] = useState("");
   const [qtd, setQtd] = useState("");
   const [precoUnit, setPrecoUnit] = useState("");
@@ -136,7 +158,6 @@ export default function ComprasEdit() {
 
   const qtdRef = useRef<HTMLInputElement | null>(null);
 
-  // ===== Helpers visuais (COMPACTO) =====
   const helperLineStyle: React.CSSProperties = {
     marginTop: 6,
     fontSize: 12,
@@ -171,7 +192,6 @@ export default function ComprasEdit() {
     fontWeight: 600,
   };
 
-  // compactação de linhas do cabeçalho (IGUAL AO CREATE)
   const headerStackStyle: React.CSSProperties = {
     display: "flex",
     flexDirection: "column",
@@ -190,7 +210,10 @@ export default function ComprasEdit() {
   const totais = useMemo(() => {
     const totalItens = itens.length;
     const totalQtd = itens.reduce((acc, it) => acc + toNumberAny(it.qtd), 0);
-    const totalValor = itens.reduce((acc, it) => acc + toNumberAny(it.qtd) * toNumberAny(it.preco_unitario), 0);
+    const totalValor = itens.reduce(
+      (acc, it) => acc + toNumberAny(it.qtd) * toNumberAny(it.preco_unitario),
+      0
+    );
 
     const frete = toNumberAny(valorFrete);
     const desconto = toNumberAny(valorDesconto);
@@ -227,10 +250,9 @@ export default function ComprasEdit() {
 
     setFornecedorId(c.fornecedor_id ? String(c.fornecedor_id) : "");
     setDataPedido(formatDateISO(c.data_pedido));
-    setStatus((String(c.status || "ABERTA").toUpperCase() as any) ?? "ABERTA");
+    setStatus(normalizeCompraStatus(c.status));
     setObservacao(c.observacao ?? "");
 
-    // ✅ novos campos (backend)
     setNumeroNF(c.numero_nota_fiscal ? String(c.numero_nota_fiscal) : "");
     setSerieNF(c.serie_nota_fiscal ? String(c.serie_nota_fiscal) : "");
     setDataEmissaoNF(formatDateISO(c.data_emissao_nf));
@@ -275,10 +297,8 @@ export default function ComprasEdit() {
         setLoading(false);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compraId]);
+  }, [compraId, navigate]);
 
-  // foca qtd ao escolher produto
   useEffect(() => {
     if (!produtoId) return;
     setTimeout(() => qtdRef.current?.focus(), 60);
@@ -287,17 +307,18 @@ export default function ComprasEdit() {
   async function salvarCabecalho(e?: React.FormEvent) {
     e?.preventDefault?.();
 
-    if (!dataPedido) return toast.error("Informe a data do pedido.");
+    if (!dataPedido) {
+      toast.error("Informe a data do pedido.");
+      return;
+    }
 
     setSavingHeader(true);
     try {
       const payload = {
         fornecedor_id: fornecedorId ? Number(fornecedorId) : null,
         data_pedido: dataPedido,
-        status,
         observacao: observacao?.trim() || null,
 
-        // ✅ novos campos
         numero_nota_fiscal: numeroNF?.trim() || null,
         serie_nota_fiscal: serieNF?.trim() || null,
         data_emissao_nf: dataEmissaoNF || null,
@@ -330,7 +351,7 @@ export default function ComprasEdit() {
     const precoN = toNumberAny(precoUnit);
 
     if (!qtdN || qtdN <= 0) return toast.error("Informe a quantidade.");
-    if (precoN < 0) return toast.error("Preço inválido.");
+    if (precoN <= 0) return toast.error("Informe um preço unitário maior que zero.");
 
     setSavingItem(true);
     try {
@@ -389,8 +410,21 @@ export default function ComprasEdit() {
     return produtosMap.get(id) ?? null;
   }, [produtoId, produtosMap]);
 
-  const disableHeader = loading || savingHeader || savingItem || removingItemId !== null;
-  const disableItem = loading || savingItem || savingHeader || removingItemId !== null;
+  const compraEditavel = status === "ABERTA";
+
+  const disableHeader =
+    loading ||
+    savingHeader ||
+    savingItem ||
+    removingItemId !== null ||
+    !compraEditavel;
+
+  const disableItem =
+    loading ||
+    savingItem ||
+    savingHeader ||
+    removingItemId !== null ||
+    !compraEditavel;
 
   const canInsert =
     !disableItem &&
@@ -398,28 +432,35 @@ export default function ComprasEdit() {
     !!qtd &&
     toNumberAny(qtd) > 0 &&
     precoUnit !== "" &&
-    toNumberAny(precoUnit) >= 0;
+    toNumberAny(precoUnit) > 0;
 
   return (
     <div style={layoutStyles.page}>
-      {/* HEADER */}
       <div style={layoutStyles.header}>
         <div>
           <h1 style={layoutStyles.title}>Compra #{compraId}</h1>
           <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
-            Status: <b>{status}</b> · Total: <b>R$ {formatMoneyBR(totais.totalFinal)}</b>
+            Status: <b>{status.replaceAll("_", " ")}</b> · Total: <b>R$ {formatMoneyBR(totais.totalFinal)}</b>
           </div>
         </div>
       </div>
 
-      {/* CABEÇALHO */}
       <div style={layoutStyles.card}>
         <div style={sectionTitleStyle}>
           <div style={sectionLabelStyle}>Cabeçalho da Compra</div>
 
-          {/* ✅ Total fixo no cabeçalho do card (não quebra com wrap do form) */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <div style={sectionHintStyle}>Atualize e salve o cabeçalho</div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              flexWrap: "wrap",
+              justifyContent: "flex-end",
+            }}
+          >
+            <div style={sectionHintStyle}>
+              {compraEditavel ? "Atualize e salve o cabeçalho" : "Compra não editável neste status"}
+            </div>
 
             <div
               style={{
@@ -441,7 +482,6 @@ export default function ComprasEdit() {
         <form onSubmit={salvarCabecalho}>
           <div style={layoutStyles.cardCompact}>
             <div style={headerStackStyle}>
-              {/* linha 1 */}
               <div style={headerRowStyle}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 320 }}>
                   <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Fornecedor</label>
@@ -449,7 +489,13 @@ export default function ComprasEdit() {
                   <select
                     value={fornecedorId}
                     onChange={(e) => setFornecedorId(e.target.value)}
-                    style={{ ...filterStyles.select, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
+                    style={{
+                      ...filterStyles.select,
+                      height: 38,
+                      padding: "0 12px",
+                      boxSizing: "border-box",
+                      width: "100%",
+                    }}
                     disabled={disableHeader}
                   >
                     <option value="">Selecione...</option>
@@ -479,7 +525,13 @@ export default function ComprasEdit() {
                     type="date"
                     value={dataPedido}
                     onChange={(e) => setDataPedido(e.target.value)}
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
+                    style={{
+                      ...filterStyles.input,
+                      height: 38,
+                      padding: "0 12px",
+                      boxSizing: "border-box",
+                      width: "100%",
+                    }}
                     disabled={disableHeader}
                   />
 
@@ -491,16 +543,20 @@ export default function ComprasEdit() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
                   <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Status</label>
 
-                  <select
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value as any)}
-                    style={{ ...filterStyles.select, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
+                  <div
+                    style={{
+                      ...filterStyles.input,
+                      height: 38,
+                      padding: "0 12px",
+                      display: "flex",
+                      alignItems: "center",
+                      background: "#f8fafc",
+                      fontWeight: 700,
+                      color: getStatusColor(status),
+                    }}
                   >
-                    <option value="ABERTA">ABERTA</option>
-                    <option value="RECEBIDA">RECEBIDA</option>
-                    <option value="CANCELADA">CANCELADA</option>
-                  </select>
+                    {status.replaceAll("_", " ")}
+                  </div>
 
                   <div style={helperLineStyle} aria-hidden>
                     {"\u00A0"}
@@ -508,7 +564,6 @@ export default function ComprasEdit() {
                 </div>
               </div>
 
-              {/* linha 2 - NF */}
               <div style={headerRowStyle}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
                   <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Número NF</label>
@@ -567,7 +622,6 @@ export default function ComprasEdit() {
                 </div>
               </div>
 
-              {/* linha 3 - financeiro/pagamento (SEM total solto) */}
               <div style={headerRowStyle}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 200 }}>
                   <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Valor Frete</label>
@@ -642,7 +696,6 @@ export default function ComprasEdit() {
                 </div>
               </div>
 
-              {/* observação */}
               <div style={{ display: "flex", gap: 12, width: "100%" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
                   <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Observação</label>
@@ -667,10 +720,19 @@ export default function ComprasEdit() {
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
-            <button type="button" style={buttonStyles.link} onClick={() => navigate(-1)} disabled={savingHeader || savingItem}>
+            <button
+              type="button"
+              style={buttonStyles.link}
+              onClick={() => navigate(-1)}
+              disabled={savingHeader || savingItem}
+            >
               Voltar
             </button>
-            <button type="submit" style={buttonStyles.primary} disabled={disableHeader || !dataPedido}>
+            <button
+              type="submit"
+              style={buttonStyles.primary}
+              disabled={disableHeader || !dataPedido}
+            >
               {savingHeader ? "Salvando..." : "Salvar Cabeçalho"}
             </button>
           </div>
@@ -679,20 +741,18 @@ export default function ComprasEdit() {
 
       <div style={{ height: 22 }} />
 
-      {/* ITENS */}
       <div style={layoutStyles.card}>
         <div style={sectionTitleStyle}>
           <div style={sectionLabelStyle}>Itens da Compra</div>
           <div style={sectionHintStyle}>
             {`Itens: ${totais.totalItens} · Qtd: ${formatQtyBR(totais.totalQtd)} · Itens: R$ ${formatMoneyBR(
               totais.totalValor
-            )} · Frete: R$ ${formatMoneyBR(totais.frete)} · Desc: R$ ${formatMoneyBR(totais.desconto)} · Total: R$ ${formatMoneyBR(
-              totais.totalFinal
-            )}`}
+            )} · Frete: R$ ${formatMoneyBR(totais.frete)} · Desc: R$ ${formatMoneyBR(
+              totais.desconto
+            )} · Total: R$ ${formatMoneyBR(totais.totalFinal)}`}
           </div>
         </div>
 
-        {/* Form inserir item */}
         <div style={layoutStyles.cardCompact}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
             <div style={{ display: "flex", gap: 12, alignItems: "flex-end", width: "100%", flexWrap: "wrap" }}>
@@ -701,7 +761,13 @@ export default function ComprasEdit() {
                 <select
                   value={produtoId}
                   onChange={(e) => setProdutoId(e.target.value)}
-                  style={{ ...filterStyles.select, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
+                  style={{
+                    ...filterStyles.select,
+                    height: 38,
+                    padding: "0 12px",
+                    boxSizing: "border-box",
+                    width: "100%",
+                  }}
                   disabled={disableItem}
                 >
                   <option value="">Selecione...</option>
@@ -732,7 +798,13 @@ export default function ComprasEdit() {
                   onChange={(e) => setQtd(normalizeDecimalString(e.target.value))}
                   placeholder="0,000"
                   inputMode="decimal"
-                  style={{ ...filterStyles.input, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
+                  style={{
+                    ...filterStyles.input,
+                    height: 38,
+                    padding: "0 12px",
+                    boxSizing: "border-box",
+                    width: "100%",
+                  }}
                   disabled={disableItem}
                 />
                 <div style={helperLineStyle} aria-hidden>
@@ -747,7 +819,13 @@ export default function ComprasEdit() {
                   onChange={(e) => setPrecoUnit(normalizeDecimalString(e.target.value))}
                   placeholder="0,00"
                   inputMode="decimal"
-                  style={{ ...filterStyles.input, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
+                  style={{
+                    ...filterStyles.input,
+                    height: 38,
+                    padding: "0 12px",
+                    boxSizing: "border-box",
+                    width: "100%",
+                  }}
                   disabled={disableItem}
                 />
                 <div style={helperLineStyle} aria-hidden>
@@ -761,7 +839,13 @@ export default function ComprasEdit() {
                   type="date"
                   value={previsaoEntrega}
                   onChange={(e) => setPrevisaoEntrega(e.target.value)}
-                  style={{ ...filterStyles.input, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
+                  style={{
+                    ...filterStyles.input,
+                    height: 38,
+                    padding: "0 12px",
+                    boxSizing: "border-box",
+                    width: "100%",
+                  }}
                   disabled={disableItem}
                 />
                 <div style={helperLineStyle} aria-hidden>
@@ -773,7 +857,14 @@ export default function ComprasEdit() {
                 <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>&nbsp;</label>
                 <button
                   type="button"
-                  style={{ ...buttonStyles.primary, height: 38, padding: "0 12px", width: "100%", whiteSpace: "nowrap", fontSize: 13 }}
+                  style={{
+                    ...buttonStyles.primary,
+                    height: 38,
+                    padding: "0 12px",
+                    width: "100%",
+                    whiteSpace: "nowrap",
+                    fontSize: 13,
+                  }}
                   onClick={inserirItem}
                   disabled={!canInsert}
                 >
@@ -787,9 +878,10 @@ export default function ComprasEdit() {
           </div>
         </div>
 
-        <div style={{ paddingTop: 12, fontSize: 13, color: "#64748b" }}>Exibindo {itens.length} item(ns)</div>
+        <div style={{ paddingTop: 12, fontSize: 13, color: "#64748b" }}>
+          Exibindo {itens.length} item(ns)
+        </div>
 
-        {/* Tabela itens */}
         <div style={{ overflowX: "auto", marginTop: 12 }}>
           <table style={{ ...tableStyles.table, tableLayout: "auto" }}>
             <thead>
@@ -829,20 +921,47 @@ export default function ComprasEdit() {
                 const isRemoving = removingItemId === it.id;
 
                 return (
-                  <tr key={it.id} style={{ background: idx % 2 === 0 ? "#fff" : "#f9fafb", opacity: isRemoving ? 0.6 : 1 }}>
+                  <tr
+                    key={it.id}
+                    style={{
+                      background: idx % 2 === 0 ? "#fff" : "#f9fafb",
+                      opacity: isRemoving ? 0.6 : 1,
+                    }}
+                  >
                     <td style={tableStyles.td}>{it.id}</td>
 
-                    <td style={{ ...tableStyles.td, whiteSpace: "normal", wordBreak: "break-word", lineHeight: 1.35 }} title={nome}>
+                    <td
+                      style={{
+                        ...tableStyles.td,
+                        whiteSpace: "normal",
+                        wordBreak: "break-word",
+                        lineHeight: 1.35,
+                      }}
+                      title={nome}
+                    >
                       <div style={{ fontWeight: 800, color: "#0f172a" }}>{nome}</div>
                     </td>
 
-                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>{formatQtyBR(qtdN)}</td>
+                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>
+                      {formatQtyBR(qtdN)}
+                    </td>
 
-                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>R$ {formatMoneyBR(precoN)}</td>
+                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>
+                      R$ {formatMoneyBR(precoN)}
+                    </td>
 
-                    <td style={tableStyles.td}>{it.previsao_entrega ? formatDateISO(it.previsao_entrega) : "-"}</td>
+                    <td style={tableStyles.td}>
+                      {it.previsao_entrega ? formatDateISO(it.previsao_entrega) : "-"}
+                    </td>
 
-                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8, fontWeight: 900 }}>
+                    <td
+                      style={{
+                        ...tableStyles.td,
+                        textAlign: "right",
+                        paddingRight: 8,
+                        fontWeight: 900,
+                      }}
+                    >
                       R$ {formatMoneyBR(subtotal)}
                     </td>
 
@@ -872,7 +991,11 @@ export default function ComprasEdit() {
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
-          <button style={buttonStyles.link} onClick={() => navigate("/compras")} disabled={savingItem || savingHeader}>
+          <button
+            style={buttonStyles.link}
+            onClick={() => navigate("/compras")}
+            disabled={savingItem || savingHeader}
+          >
             Voltar para lista
           </button>
         </div>

@@ -8,9 +8,20 @@ import { tableStyles } from "../../styles/table";
 import { buttonStyles } from "../../styles/buttons";
 import { filterStyles } from "../../styles/filters";
 
-import { FiChevronLeft, FiChevronRight, FiEdit, FiTrash2 } from "react-icons/fi";
+import {
+  FiChevronLeft,
+  FiChevronRight,
+  FiEdit,
+  FiTrash2,
+  FiPackage,
+  FiXCircle,
+} from "react-icons/fi";
 
-type CompraStatus = "ABERTA" | "RECEBIDA" | "CANCELADA";
+type CompraStatus =
+  | "ABERTA"
+  | "PARCIALMENTE_RECEBIDA"
+  | "RECEBIDA"
+  | "CANCELADA";
 
 type CompraRow = {
   id: number;
@@ -18,12 +29,23 @@ type CompraRow = {
   data_pedido?: string;
   status?: CompraStatus;
   observacao?: string | null;
+  valor_total?: string | number | null;
+  valor_frete?: string | number | null;
+  valor_desconto?: string | number | null;
 
-  // se o backend já trouxer include:
-  fornecedor?: { id: number; nome?: string; razao_social?: string; nome_fantasia?: string };
-  Fornecedor?: { id: number; nome?: string; razao_social?: string; nome_fantasia?: string };
+  fornecedor?: {
+    id: number;
+    nome?: string;
+    razao_social?: string;
+    nome_fantasia?: string;
+  };
+  Fornecedor?: {
+    id: number;
+    nome?: string;
+    razao_social?: string;
+    nome_fantasia?: string;
+  };
 
-  // itens (se vier)
   itens?: any[];
   CompraItems?: any[];
 };
@@ -33,13 +55,62 @@ type FornecedorOption = {
   nome: string;
 };
 
+function parseDecimalApi(v: any): number {
+  if (v === null || v === undefined || v === "") return 0;
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+
+  const s = String(v).trim().replace(/\s/g, "").replace("R$", "");
+
+  if (/^-?\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  if (/^-?\d{1,3}(\.\d{3})*,\d+$/.test(s)) {
+    const n = Number(s.replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  if (/^-?\d+,\d+$/.test(s)) {
+    const n = Number(s.replace(",", "."));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  const n = Number(s);
+  return Number.isFinite(n) ? n : 0;
+}
 
 function pickListResponse(resData: any) {
-  if (Array.isArray(resData?.data)) return { data: resData.data, total: Number(resData.total ?? resData.count ?? 0) || 0 };
-  if (Array.isArray(resData?.data?.data)) return { data: resData.data.data, total: Number(resData.data.total ?? resData.data.count ?? 0) || 0 };
-  if (Array.isArray(resData?.data?.rows)) return { data: resData.data.rows, total: Number(resData.data.count ?? 0) || 0 };
-  if (Array.isArray(resData?.rows)) return { data: resData.rows, total: Number(resData.count ?? 0) || 0 };
-  if (Array.isArray(resData?.items)) return { data: resData.items, total: Number(resData.total ?? 0) || 0 };
+  if (Array.isArray(resData?.data)) {
+    return {
+      data: resData.data,
+      total: Number(resData.total ?? resData.count ?? 0) || 0,
+    };
+  }
+  if (Array.isArray(resData?.data?.data)) {
+    return {
+      data: resData.data.data,
+      total: Number(resData.data.total ?? resData.data.count ?? 0) || 0,
+    };
+  }
+  if (Array.isArray(resData?.data?.rows)) {
+    return {
+      data: resData.data.rows,
+      total: Number(resData.data.count ?? 0) || 0,
+    };
+  }
+  if (Array.isArray(resData?.rows)) {
+    return {
+      data: resData.rows,
+      total: Number(resData.count ?? 0) || 0,
+    };
+  }
+  if (Array.isArray(resData?.items)) {
+    return {
+      data: resData.items,
+      total: Number(resData.total ?? 0) || 0,
+    };
+  }
   return { data: [], total: 0 };
 }
 
@@ -47,11 +118,13 @@ function formatDateBR(value: any): string {
   if (!value) return "-";
   const s = String(value).trim();
   if (!s) return "-";
+
   const ymd = s.slice(0, 10);
   if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
     const [y, m, d] = ymd.split("-");
     return `${d}/${m}/${y}`;
   }
+
   const dt = new Date(s);
   if (!isNaN(dt.getTime())) {
     const d = String(dt.getDate()).padStart(2, "0");
@@ -59,55 +132,68 @@ function formatDateBR(value: any): string {
     const y = dt.getFullYear();
     return `${d}/${m}/${y}`;
   }
+
   return "-";
 }
 
-function toNumberSafe(v: any): number {
-  if (v === null || v === undefined) return 0;
-  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
-
-  const s = String(v).trim();
-  if (!s) return 0;
-
-  const hasComma = s.includes(",");
-  const hasDot = s.includes(".");
-
-  // Ex: 1.234,56  => 1234.56
-  if (hasComma && hasDot) {
-    const normalized = s.replace(/\./g, "").replace(",", ".");
-    const n = Number(normalized);
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  // Ex: 1234,56 => 1234.56
-  if (hasComma) {
-    const n = Number(s.replace(",", "."));
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  // Ex: 1001.000 => 1001 (decimal com ponto)
-  const n = Number(s);
-  return Number.isFinite(n) ? n : 0;
-}
-
 function formatMoneyBR(v: any): string {
-  const n = toNumberSafe(v);
+  const n = typeof v === "number" ? v : parseDecimalApi(v);
   if (!Number.isFinite(n)) return "-";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  return n.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
 }
 
-function calcTotalFromItens(row: any): number | null {
-  if (row?.total !== undefined && row?.total !== null) return toNumberSafe(row.total);
-  const itens = row?.itens ?? row?.CompraItems ?? row?.compra_itens ?? row?.items ?? null;
-  if (!Array.isArray(itens)) return null;
-
-  let sum = 0;
-  for (const it of itens) {
-    const qtd = toNumberSafe(it?.qtd);
-    const preco = toNumberSafe(it?.preco_unitario);
-    sum += qtd * preco;
+function getTotalCompra(row: any): number | null {
+  if (
+    row?.valor_total !== undefined &&
+    row?.valor_total !== null &&
+    row?.valor_total !== ""
+  ) {
+    return parseDecimalApi(row.valor_total);
   }
-  return sum;
+
+  return null;
+}
+
+function getResumoRecebimento(row: any) {
+  const itens = row?.itens ?? row?.CompraItems ?? [];
+  if (!Array.isArray(itens) || itens.length === 0) {
+    return {
+      totalQtd: 0,
+      totalRecebido: 0,
+      percentual: 0,
+    };
+  }
+
+  let totalQtd = 0;
+  let totalRecebido = 0;
+
+  for (const it of itens) {
+    totalQtd += parseDecimalApi(it?.qtd);
+    totalRecebido += parseDecimalApi(it?.recebido_qtd);
+  }
+
+  const percentual =
+    totalQtd > 0 ? Math.min(100, (totalRecebido / totalQtd) * 100) : 0;
+
+  return {
+    totalQtd,
+    totalRecebido,
+    percentual,
+  };
+}
+
+function formatQtyBR(v: any): string {
+  const n = typeof v === "number" ? v : parseDecimalApi(v);
+  if (!Number.isFinite(n)) return "0,000";
+
+  return n.toLocaleString("pt-BR", {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  });
 }
 
 export default function ComprasList() {
@@ -116,29 +202,32 @@ export default function ComprasList() {
   const [rows, setRows] = useState<CompraRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // filtros
   const [filtroFornecedorId, setFiltroFornecedorId] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroDataInicio, setFiltroDataInicio] = useState("");
   const [filtroDataFim, setFiltroDataFim] = useState("");
 
-  // ordenação
-  const [orderBy, setOrderBy] = useState<"id" | "data_pedido" | "status" | "fornecedor_id">("id");
+  const [orderBy, setOrderBy] = useState<
+    "id" | "data_pedido" | "status" | "fornecedor_id"
+  >("id");
   const [orderDir, setOrderDir] = useState<"ASC" | "DESC">("DESC");
 
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [total, setTotal] = useState(0);
 
-  // combos
-  const [fornecedoresOptions, setFornecedoresOptions] = useState<FornecedorOption[]>([]);
+  const [fornecedoresOptions, setFornecedoresOptions] = useState<
+    FornecedorOption[]
+  >([]);
 
-  // ações
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  const hasFilters = !!filtroFornecedorId || !!filtroStatus || !!filtroDataInicio || !!filtroDataFim;
+  const hasFilters =
+    !!filtroFornecedorId ||
+    !!filtroStatus ||
+    !!filtroDataInicio ||
+    !!filtroDataFim;
 
-  // compact
   const tdCompact: React.CSSProperties = {
     ...tableStyles.td,
     paddingTop: 8,
@@ -166,19 +255,27 @@ export default function ComprasList() {
 
   async function loadFornecedores() {
     try {
-      // ✅ CENÁRIO 1: você tem um endpoint próprio
-      const res = await api.get("/fornecedores", { params: { page: 1, limit: 1000 } });
+      const res = await api.get("/fornecedores", {
+        params: { page: 1, limit: 1000 },
+      });
 
-      const arr = (res.data?.data ?? res.data?.rows ?? res.data?.items ?? []).map((f: any) => ({
+      const arr = (
+        res.data?.data ??
+        res.data?.rows ??
+        res.data?.items ??
+        []
+      ).map((f: any) => ({
         id: Number(f.id),
-        // ajuste aqui conforme retorno:
-        nome: f.nome ?? f.razao_social ?? f.nome_fantasia ?? `Fornecedor #${f.id}`,
+        nome:
+          f.nome ?? f.razao_social ?? f.nome_fantasia ?? `Fornecedor #${f.id}`,
       }));
 
       setFornecedoresOptions(arr);
     } catch (err) {
-      console.warn("Sem /fornecedores? Ajuste loadFornecedores() para seu endpoint.", err);
-      // se quiser: não toastar pra não encher o saco
+      console.warn(
+        "Sem /fornecedores? Ajuste loadFornecedores() para seu endpoint.",
+        err
+      );
     }
   }
 
@@ -212,43 +309,6 @@ export default function ComprasList() {
     }
   }
 
-  useEffect(() => {
-    loadFornecedores();
-    carregarCompras();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setPage(1);
-      carregarCompras();
-    }, 400);
-
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroFornecedorId, filtroStatus, filtroDataInicio, filtroDataFim, orderBy, orderDir]);
-
-  useEffect(() => {
-    carregarCompras();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
-
-  function handleSort(coluna: "id" | "data_pedido" | "status" | "fornecedor_id") {
-    if (orderBy === coluna) {
-      setOrderDir((prev) => (prev === "ASC" ? "DESC" : "ASC"));
-    } else {
-      setOrderBy(coluna);
-      setOrderDir("ASC");
-    }
-  }
-
-  function statusStyle(status: any) {
-    const s = String(status || "").toUpperCase();
-    if (s === "RECEBIDA") return { background: "#dcfce7", color: "#166534" };
-    if (s === "CANCELADA") return { background: "#fee2e2", color: "#991b1b" };
-    return { background: "#dbeafe", color: "#1e40af" }; // ABERTA/default
-  }
-
   async function excluirCompra(row: any) {
     const id = Number(row?.id);
     if (!id) return;
@@ -260,7 +320,9 @@ export default function ComprasList() {
       fornecedoresMap.get(fornecedorId)?.nome ??
       (fornecedorId ? `Fornecedor #${fornecedorId}` : "-");
 
-    const ok = window.confirm(`Excluir a compra #${id}?\nFornecedor: ${fornecedorNome}\n\nEssa ação não pode ser desfeita.`);
+    const ok = window.confirm(
+      `Excluir a compra #${id}?\nFornecedor: ${fornecedorNome}\n\nEssa ação não pode ser desfeita.`
+    );
     if (!ok) return;
 
     setDeletingId(id);
@@ -279,25 +341,129 @@ export default function ComprasList() {
     }
   }
 
+  async function cancelarCompra(row: any) {
+    const id = Number(row?.id);
+    if (!id) return;
+
+    const fornecedorId = Number(row?.fornecedor_id);
+    const fornecedorNome =
+      row?.fornecedor?.nome ??
+      row?.Fornecedor?.nome ??
+      fornecedoresMap.get(fornecedorId)?.nome ??
+      (fornecedorId ? `Fornecedor #${fornecedorId}` : "-");
+
+    const ok = window.confirm(
+      `Cancelar a compra #${id}?\nFornecedor: ${fornecedorNome}`
+    );
+    if (!ok) return;
+
+    try {
+      await api.post(`/compras/${id}/cancelar`, {});
+      toast.success("Compra cancelada!");
+      await carregarCompras();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.response?.data?.error || "Erro ao cancelar compra");
+    }
+  }
+
+  useEffect(() => {
+    loadFornecedores();
+    carregarCompras();
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setPage(1);
+      carregarCompras();
+    }, 400);
+
+    return () => clearTimeout(t);
+  }, [
+    filtroFornecedorId,
+    filtroStatus,
+    filtroDataInicio,
+    filtroDataFim,
+    orderBy,
+    orderDir,
+  ]);
+
+  useEffect(() => {
+    carregarCompras();
+  }, [page]);
+
+  function handleSort(
+    coluna: "id" | "data_pedido" | "status" | "fornecedor_id"
+  ) {
+    if (orderBy === coluna) {
+      setOrderDir((prev) => (prev === "ASC" ? "DESC" : "ASC"));
+    } else {
+      setOrderBy(coluna);
+      setOrderDir("ASC");
+    }
+  }
+
+  function statusStyle(status: any) {
+    const s = String(status || "").toUpperCase();
+
+    if (s === "RECEBIDA") {
+      return { background: "#dcfce7", color: "#166534" };
+    }
+
+    if (s === "PARCIALMENTE_RECEBIDA") {
+      return { background: "#fef3c7", color: "#92400e" };
+    }
+
+    if (s === "CANCELADA") {
+      return { background: "#fee2e2", color: "#991b1b" };
+    }
+
+    return { background: "#dbeafe", color: "#1e40af" };
+  }
+
   const totalPages = Math.ceil(total / limit);
 
   return (
     <div style={layoutStyles.page}>
       <div style={layoutStyles.header}>
         <h1 style={layoutStyles.title}>Compras</h1>
-        <div style={{ fontSize: 13, color: "#64748b" }}>{total} compra(s) encontrada(s)</div>
+        <div style={{ fontSize: 13, color: "#64748b" }}>
+          {total} compra(s) encontrada(s)
+        </div>
       </div>
 
-      {/* FILTROS */}
       <div style={layoutStyles.cardCompact}>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 320, flex: 1 }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Fornecedor</label>
+          <div
+            style={{
+              display: "flex",
+              gap: 16,
+              alignItems: "flex-end",
+              flexWrap: "wrap",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                minWidth: 320,
+                flex: 1,
+              }}
+            >
+              <label
+                style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}
+              >
+                Fornecedor
+              </label>
               <select
                 value={filtroFornecedorId}
                 onChange={(e) => setFiltroFornecedorId(e.target.value)}
-                style={{ ...filterStyles.select, height: 36, padding: "0 12px" }}
+                style={{
+                  ...filterStyles.select,
+                  height: 36,
+                  padding: "0 12px",
+                }}
                 disabled={loading || deletingId !== null}
               >
                 <option value="">Todos</option>
@@ -309,39 +475,87 @@ export default function ComprasList() {
               </select>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Status</label>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                width: 220,
+              }}
+            >
+              <label
+                style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}
+              >
+                Status
+              </label>
               <select
                 value={filtroStatus}
                 onChange={(e) => setFiltroStatus(e.target.value)}
-                style={{ ...filterStyles.select, height: 36, padding: "0 12px" }}
+                style={{
+                  ...filterStyles.select,
+                  height: 36,
+                  padding: "0 12px",
+                }}
                 disabled={loading || deletingId !== null}
               >
                 <option value="">Todos</option>
                 <option value="ABERTA">Aberta</option>
+                <option value="PARCIALMENTE_RECEBIDA">
+                  Parcialmente recebida
+                </option>
                 <option value="RECEBIDA">Recebida</option>
                 <option value="CANCELADA">Cancelada</option>
               </select>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 180 }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>De</label>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                width: 180,
+              }}
+            >
+              <label
+                style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}
+              >
+                De
+              </label>
               <input
                 type="date"
                 value={filtroDataInicio}
                 onChange={(e) => setFiltroDataInicio(e.target.value)}
-                style={{ ...filterStyles.input, height: 36, padding: "0 12px" }}
+                style={{
+                  ...filterStyles.input,
+                  height: 36,
+                  padding: "0 12px",
+                }}
                 disabled={loading || deletingId !== null}
               />
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 180 }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Até</label>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                width: 180,
+              }}
+            >
+              <label
+                style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}
+              >
+                Até
+              </label>
               <input
                 type="date"
                 value={filtroDataFim}
                 onChange={(e) => setFiltroDataFim(e.target.value)}
-                style={{ ...filterStyles.input, height: 36, padding: "0 12px" }}
+                style={{
+                  ...filterStyles.input,
+                  height: 36,
+                  padding: "0 12px",
+                }}
                 disabled={loading || deletingId !== null}
               />
             </div>
@@ -366,55 +580,90 @@ export default function ComprasList() {
         </div>
       </div>
 
-      {/* BOTÕES */}
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, margin: "12px 0 16px" }}>
-        <button style={buttonStyles.link} onClick={() => navigate(-1)} disabled={loading || deletingId !== null}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 12,
+          margin: "12px 0 16px",
+        }}
+      >
+        <button
+          style={buttonStyles.link}
+          onClick={() => navigate(-1)}
+          disabled={loading || deletingId !== null}
+        >
           Voltar
         </button>
-        <button style={buttonStyles.primary} onClick={() => navigate("/compras/novo")} disabled={loading || deletingId !== null}>
+        <button
+          style={buttonStyles.primary}
+          onClick={() => navigate("/compras/novo")}
+          disabled={loading || deletingId !== null}
+        >
           + Nova Compra
         </button>
       </div>
 
-      {/* TABELA */}
       <div style={layoutStyles.card}>
         <div style={{ paddingBottom: 12, fontSize: 13, color: "#64748b" }}>
-          {loading ? "Atualizando lista..." : `Exibindo ${rows.length} de ${total} registro(s)`}
+          {loading
+            ? "Atualizando lista..."
+            : `Exibindo ${rows.length} de ${total} registro(s)`}
         </div>
 
         <div style={{ overflowX: "auto" }}>
           <table style={{ ...tableStyles.table, tableLayout: "fixed" }}>
             <thead>
               <tr>
-                <th style={{ ...tableStyles.th, width: 120, cursor: "pointer" }} onClick={() => handleSort("data_pedido")}>
+                <th
+                  style={{ ...tableStyles.th, width: 120, cursor: "pointer" }}
+                  onClick={() => handleSort("data_pedido")}
+                >
                   Data {orderBy === "data_pedido" && (orderDir === "ASC" ? "▲" : "▼")}
                 </th>
 
-                <th style={{ ...tableStyles.th, width: "42%", cursor: "pointer" }} onClick={() => handleSort("fornecedor_id")}>
+                <th
+                  style={{ ...tableStyles.th, width: "42%", cursor: "pointer" }}
+                  onClick={() => handleSort("fornecedor_id")}
+                >
                   Fornecedor {orderBy === "fornecedor_id" && (orderDir === "ASC" ? "▲" : "▼")}
                 </th>
 
-                <th style={{ ...tableStyles.th, width: 150, textAlign: "right" }}>Total</th>
+                <th style={{ ...tableStyles.th, width: 150, textAlign: "right" }}>
+                  Total
+                </th>
 
-                <th style={{ ...tableStyles.th, width: 150, cursor: "pointer" }} onClick={() => handleSort("status")}>
+                <th style={{ ...tableStyles.th, width: 230, textAlign: "center" }}>
+                  Recebimento
+                </th>
+
+                <th
+                  style={{ ...tableStyles.th, width: 150, cursor: "pointer" }}
+                  onClick={() => handleSort("status")}
+                >
                   Status {orderBy === "status" && (orderDir === "ASC" ? "▲" : "▼")}
                 </th>
 
-                <th style={{ ...tableStyles.th, width: 140, textAlign: "center" }}>Ações</th>
+                <th
+                  style={{ ...tableStyles.th, width: 170, textAlign: "center" }}
+                >
+                  Ações
+                </th>
               </tr>
             </thead>
 
             <tbody>
               {rows.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: "center", padding: 20 }}>
+                  <td colSpan={6} style={{ textAlign: "center", padding: 20 }}>
                     Nenhuma compra encontrada.
                   </td>
                 </tr>
               )}
 
               {rows.map((r: any, index) => {
-                const totalCalc = calcTotalFromItens(r);
+                const totalCalc = getTotalCompra(r);
+                const resumoRecebimento = getResumoRecebimento(r);
                 const isDeleting = deletingId === Number(r.id);
 
                 const fornecedorIdNum = Number(r?.fornecedor_id);
@@ -423,6 +672,14 @@ export default function ComprasList() {
                   r?.Fornecedor?.nome ??
                   fornecedoresMap.get(fornecedorIdNum)?.nome ??
                   (fornecedorIdNum ? `Fornecedor #${fornecedorIdNum}` : "-");
+
+                const status = String(r.status || "").toUpperCase();
+                const podeEditar = status === "ABERTA";
+                const podeExcluir = status === "ABERTA";
+                const podeReceber =
+                  status === "ABERTA" || status === "PARCIALMENTE_RECEBIDA";
+                const podeCancelar =
+                  status === "ABERTA" || status === "PARCIALMENTE_RECEBIDA";
 
                 return (
                   <tr
@@ -434,12 +691,68 @@ export default function ComprasList() {
                   >
                     <td style={tdCompact}>{formatDateBR(r.data_pedido)}</td>
 
-                    <td style={{ ...tdCompact, whiteSpace: "normal", wordBreak: "break-word", lineHeight: 1.25 }}>
+                    <td
+                      style={{
+                        ...tdCompact,
+                        whiteSpace: "normal",
+                        wordBreak: "break-word",
+                        lineHeight: 1.25,
+                      }}
+                    >
                       {fornecedorNome}
                     </td>
 
                     <td style={tdCompactRight}>
-                      {totalCalc === null ? <span style={{ color: "#94a3b8" }}>-</span> : formatMoneyBR(totalCalc)}
+                      {totalCalc === null ? (
+                        <span style={{ color: "#94a3b8" }}>-</span>
+                      ) : (
+                        formatMoneyBR(totalCalc)
+                      )}
+                    </td>
+
+                    <td style={{ ...tdCompact, textAlign: "center" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 6,
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>
+                          {formatQtyBR(resumoRecebimento.totalRecebido)} / {formatQtyBR(resumoRecebimento.totalQtd)}
+                        </div>
+
+                        <div
+                          style={{
+                            width: 140,
+                            height: 8,
+                            background: "#e5e7eb",
+                            borderRadius: 999,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: `${resumoRecebimento.percentual}%`,
+                              height: "100%",
+                              background:
+                                resumoRecebimento.percentual >= 100
+                                  ? "#22c55e"
+                                  : resumoRecebimento.percentual > 0
+                                    ? "#f59e0b"
+                                    : "#93c5fd",
+                              borderRadius: 999,
+                              transition: "width 0.2s ease",
+                            }}
+                          />
+                        </div>
+
+                        <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>
+                          {resumoRecebimento.percentual.toFixed(0)}%
+                        </div>
+                      </div>
                     </td>
 
                     <td style={tdCompact}>
@@ -453,28 +766,79 @@ export default function ComprasList() {
                           ...statusStyle(r.status),
                         }}
                       >
-                        {String(r.status || "-")}
+                        {String(r.status || "-").replaceAll("_", " ")}
                       </span>
                     </td>
 
                     <td style={tdCompactCenter}>
-                      <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "center",
+                          gap: 8,
+                        }}
+                      >
                         <button
                           style={buttonStyles.icon}
-                          onClick={() => navigate(`/compras/${r.id}/editar`)}
+                          onClick={() =>
+                            navigate(
+                              podeEditar
+                                ? `/compras/${r.id}/editar`
+                                : `/compras/${r.id}`
+                            )
+                          }
                           disabled={loading || isDeleting}
-                          title="Editar"
+                          title={podeEditar ? "Editar" : "Visualizar"}
                         >
                           <FiEdit size={18} color="#2563eb" />
                         </button>
 
                         <button
                           style={buttonStyles.icon}
-                          onClick={() => excluirCompra(r)}
-                          disabled={loading || isDeleting}
-                          title="Excluir"
+                          onClick={() => navigate(`/compras/${r.id}/receber`)}
+                          disabled={loading || isDeleting || !podeReceber}
+                          title={
+                            podeReceber
+                              ? "Receber"
+                              : "Compra não disponível para recebimento"
+                          }
                         >
-                          <FiTrash2 size={18} color="#dc2626" />
+                          <FiPackage
+                            size={18}
+                            color={podeReceber ? "#16a34a" : "#94a3b8"}
+                          />
+                        </button>
+
+                        <button
+                          style={buttonStyles.icon}
+                          onClick={() => cancelarCompra(r)}
+                          disabled={loading || isDeleting || !podeCancelar}
+                          title={
+                            podeCancelar
+                              ? "Cancelar"
+                              : "Compra não pode ser cancelada"
+                          }
+                        >
+                          <FiXCircle
+                            size={18}
+                            color={podeCancelar ? "#f59e0b" : "#94a3b8"}
+                          />
+                        </button>
+
+                        <button
+                          style={buttonStyles.icon}
+                          onClick={() => excluirCompra(r)}
+                          disabled={loading || isDeleting || !podeExcluir}
+                          title={
+                            podeExcluir
+                              ? "Excluir"
+                              : "Compra não pode ser excluída"
+                          }
+                        >
+                          <FiTrash2
+                            size={18}
+                            color={podeExcluir ? "#dc2626" : "#94a3b8"}
+                          />
                         </button>
                       </div>
                     </td>
@@ -484,7 +848,14 @@ export default function ComprasList() {
 
               {loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
+                  <td
+                    colSpan={5}
+                    style={{
+                      textAlign: "center",
+                      padding: 20,
+                      color: "#64748b",
+                    }}
+                  >
                     Carregando registros...
                   </td>
                 </tr>
@@ -494,11 +865,21 @@ export default function ComprasList() {
         </div>
 
         {totalPages > 1 && (
-          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginTop: 16 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: 12,
+              marginTop: 16,
+            }}
+          >
             <button
               disabled={loading || page === 1 || deletingId !== null}
               onClick={() => setPage((prev) => prev - 1)}
-              style={buttonStyles.paginationButtonStyle(loading || page === 1 || deletingId !== null)}
+              style={buttonStyles.paginationButtonStyle(
+                loading || page === 1 || deletingId !== null
+              )}
             >
               <FiChevronLeft size={20} />
             </button>
@@ -510,7 +891,9 @@ export default function ComprasList() {
             <button
               disabled={loading || page >= totalPages || deletingId !== null}
               onClick={() => setPage((prev) => prev + 1)}
-              style={buttonStyles.paginationButtonStyle(loading || page >= totalPages || deletingId !== null)}
+              style={buttonStyles.paginationButtonStyle(
+                loading || page >= totalPages || deletingId !== null
+              )}
             >
               <FiChevronRight size={20} />
             </button>

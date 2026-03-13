@@ -31,6 +31,10 @@ import PedidoVendaEdit from "../pages/PedidoVenda/Edit";
 import Compra from "../pages/Compras/List";
 import CompraCreate from "../pages/Compras/Create";
 import CompraEdit from "../pages/Compras/Edit";
+import ComprasReceber from "../pages/Compras/Receber";
+import ComprasShow from "../pages/Compras/Show";
+import EstoqueList from "../pages/Estoque/List";
+import EstoqueMovimentacoes from "../pages/Estoque/Movimentacoes";
 import Fornecedor from "../pages/Fornecedores/List";
 import FornecedorCreate from "../pages/Fornecedores/Create";
 import FornecedorEdit from "../pages/Fornecedores/Edit";
@@ -80,6 +84,11 @@ export default function AppRoutes() {
               <Route path="/compras" element={<Compra />} />
               <Route path="/compras/novo" element={<CompraCreate />} />
               <Route path="/compras/:id/editar" element={<CompraEdit />} />
+              <Route path="/compras/:id/receber" element={<ComprasReceber />} />
+              <Route path="/compras/:id" element={<ComprasShow />} />
+
+              <Route path="/estoque" element={<EstoqueList />} />
+              <Route path="/estoque/movimentacoes" element={<EstoqueMovimentacoes />} />
 
               <Route path="/fornecedores" element={<Fornecedor />} />
               <Route path="/fornecedores/novo" element={<FornecedorCreate />} />

@@ -10,6 +10,8 @@ import {
   FiShoppingCart,
   FiChevronDown,
   FiChevronUp,
+  FiArchive,
+  FiActivity,
 } from "react-icons/fi";
 
 import { sidebarStyles } from "../styles/sidebar";
@@ -17,7 +19,9 @@ import { sidebarStyles } from "../styles/sidebar";
 export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
+
   const [openCadastro, setOpenCadastro] = useState(true);
+  const [openEstoque, setOpenEstoque] = useState(true);
 
   function isActive(path: string) {
     return location.pathname === path || location.pathname.startsWith(path + "/");
@@ -31,13 +35,21 @@ export default function Sidebar() {
       isActive("/grupos") ||
       isActive("/fornecedores") ||
       isActive("/subgrupos"),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [location.pathname]
+  );
+
+  const estoqueActive = useMemo(
+    () => isActive("/estoque") || isActive("/estoque/movimentacoes"),
     [location.pathname]
   );
 
   useEffect(() => {
     if (cadastrosActive) setOpenCadastro(true);
   }, [cadastrosActive]);
+
+  useEffect(() => {
+    if (estoqueActive) setOpenEstoque(true);
+  }, [estoqueActive]);
 
   const onHover =
     (active: boolean) => (e: React.MouseEvent<HTMLDivElement>) => {
@@ -58,7 +70,7 @@ export default function Sidebar() {
       <div style={sidebarStyles.logo}>SisContratos</div>
 
       <div style={sidebarStyles.sectionLabel}>Visão geral</div>
-      {/* Dashboard */}
+
       {(() => {
         const active = isActive("/");
         return (
@@ -79,7 +91,6 @@ export default function Sidebar() {
 
       <div style={sidebarStyles.sectionLabel}>Gestão</div>
 
-      {/* Cadastros */}
       {(() => {
         const active = cadastrosActive;
         return (
@@ -132,7 +143,6 @@ export default function Sidebar() {
         );
       })()}
 
-      {/* Contratos */}
       {(() => {
         const active = isActive("/contratos");
         return (
@@ -151,7 +161,6 @@ export default function Sidebar() {
         );
       })()}
 
-      {/* Vendas */}
       {(() => {
         const active = isActive("/pedidosvenda");
         return (
@@ -170,7 +179,6 @@ export default function Sidebar() {
         );
       })()}
 
-      {/* Compras */}
       {(() => {
         const active = isActive("/compras");
         return (
@@ -186,6 +194,54 @@ export default function Sidebar() {
             <FiShoppingCart size={18} />
             Compras
           </div>
+        );
+      })()}
+
+      {(() => {
+        const active = estoqueActive;
+        return (
+          <>
+            <div
+              style={{
+                ...sidebarStyles.menuItem,
+                ...(active ? sidebarStyles.activeItem : {}),
+              }}
+              onMouseEnter={onHover(active)}
+              onMouseLeave={onLeave(active)}
+              onClick={() => setOpenEstoque((v) => !v)}
+            >
+              <FiArchive size={18} />
+              <span style={{ flex: 1 }}>Estoque</span>
+              {openEstoque ? <FiChevronUp /> : <FiChevronDown />}
+            </div>
+
+            {openEstoque && (
+              <div style={sidebarStyles.submenu}>
+                {[
+                  { path: "/estoque", label: "Posição de estoque", icon: <FiArchive size={16} /> },
+                  { path: "/estoque/movimentacoes", label: "Movimentações", icon: <FiActivity size={16} /> },
+                ].map((it) => {
+                  const subActive = isActive(it.path);
+                  return (
+                    <div
+                      key={it.path}
+                      style={{
+                        ...sidebarStyles.submenuItem,
+                        ...(subActive ? sidebarStyles.activeSubItem : {}),
+                      }}
+                      onMouseEnter={onHover(subActive)}
+                      onMouseLeave={onLeave(subActive)}
+                      onClick={() => navigate(it.path)}
+                      title={it.label}
+                    >
+                      {it.icon}
+                      {it.label}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         );
       })()}
     </aside>

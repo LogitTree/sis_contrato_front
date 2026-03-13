@@ -374,7 +374,7 @@ export default function ComprasCreate() {
     const precoN = toNumberAny(precoUnit);
 
     if (!qtdN || qtdN <= 0) return toast.error("Informe a quantidade.");
-    if (precoN < 0) return toast.error("Preço inválido.");
+    if (precoN <= 0) return toast.error("Informe um preço unitário maior que zero.");
 
     setSavingItem(true);
     try {
@@ -430,7 +430,7 @@ export default function ComprasCreate() {
     !!qtd &&
     toNumberAny(qtd) > 0 &&
     precoUnit !== "" &&
-    toNumberAny(precoUnit) >= 0;
+    toNumberAny(precoUnit) > 0;
 
   return (
     <div style={layoutStyles.page}>
