@@ -62,6 +62,25 @@ export default function InventarioScanner() {
   const [validade, setValidade] = useState("");
   const [observacao, setObservacao] = useState("");
 
+  const [codigoManual, setCodigoManual] = useState("");
+  const [ultimoItemAdicionado, setUltimoItemAdicionado] = useState<{
+    nome: string;
+    quantidade: number;
+  } | null>(null);
+
+  type HistoricoLeitura = {
+    id: string;
+    produto_id: number;
+    nome: string;
+    codigo: string;
+    quantidade: number;
+    lote?: string | null;
+    validade?: string | null;
+    dataHora: string;
+  };
+
+  const [historicoItens, setHistoricoItens] = useState<HistoricoLeitura[]>([]);
+
   useEffect(() => {
     mountedRef.current = true;
 
@@ -226,6 +245,20 @@ export default function InventarioScanner() {
     }
   }
 
+  async function buscarCodigoManual() {
+    const codigo = String(codigoManual || "").replace(/\s+/g, "").trim();
+
+    if (!codigo) {
+      toast.error("Informe um código de barras");
+      return;
+    }
+
+    lastReadRef.current = codigo;
+    setCodigoLido(codigo);
+    await pararScanner();
+    await buscarProdutoPorCodigo(codigo);
+  }
+
   async function buscarProdutoPorCodigo(codigo: string) {
     try {
       setSearchingProduct(true);
@@ -371,7 +404,23 @@ export default function InventarioScanner() {
 
       await api.post(`/inventario/${inventarioId}/itens`, payload);
 
+      registrarHistorico({
+        produto_id: produto.id,
+        nome: produto.nome,
+        codigo: produto.cod_barra,
+        quantidade: toNumber(quantidade),
+        lote: produto.controla_lote ? lote : null,
+        validade: produto.controla_validade ? validade : null,
+      });
+
+      setUltimoItemAdicionado({
+        nome: produto.nome,
+        quantidade: toNumber(quantidade),
+      });
+
       toast.success("Item adicionado ao inventário");
+
+      setCodigoManual("");
       await limparLeitura();
     } catch (err: any) {
       console.error(err);
@@ -379,6 +428,41 @@ export default function InventarioScanner() {
     } finally {
       setSavingItem(false);
     }
+  }
+
+  function somarQuantidade(valor: number) {
+    const atual = toNumber(quantidade, 0);
+    setQuantidade(String(atual + valor));
+  }
+
+  function limparQuantidade() {
+    setQuantidade("");
+  }
+
+  function registrarHistorico(item: {
+    produto_id: number;
+    nome: string;
+    codigo?: string | null;
+    quantidade: number;
+    lote?: string | null;
+    validade?: string | null;
+  }) {
+    const novoItem: HistoricoLeitura = {
+      id: `${Date.now()}-${item.produto_id}`,
+      produto_id: item.produto_id,
+      nome: item.nome,
+      codigo: item.codigo || "-",
+      quantidade: item.quantidade,
+      lote: item.lote || null,
+      validade: item.validade || null,
+      dataHora: new Date().toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }),
+    };
+
+    setHistoricoItens((prev) => [novoItem, ...prev].slice(0, 10));
   }
 
   return (
@@ -472,8 +556,8 @@ export default function InventarioScanner() {
                   {loadingCamera
                     ? "Iniciando câmera..."
                     : cameraReady
-                    ? "Scanner ativo"
-                    : "Câmera desligada"}
+                      ? "Scanner ativo"
+                      : "Câmera desligada"}
                 </div>
               </div>
 
@@ -520,14 +604,107 @@ export default function InventarioScanner() {
               <div style={styles.sectionHeader}>
                 <div style={styles.sectionTitle}>
                   <FiSearch size={18} style={{ marginRight: 8 }} />
+                  Busca manual
+                </div>
+                <div style={styles.sectionHint}>
+                  Use quando a câmera não conseguir ler
+                </div>
+              </div>
+
+              <div style={styles.fieldWrap}>
+                <label style={styles.label}>Código de barras</label>
+                <input
+                  type="text"
+                  value={codigoManual}
+                  onChange={(e) => setCodigoManual(e.target.value)}
+                  placeholder="Digite ou cole o código"
+                  style={styles.input}
+                />
+              </div>
+
+              <div style={styles.bottomActions}>
+                <button
+                  type="button"
+                  style={styles.secondaryButton}
+                  onClick={buscarCodigoManual}
+                >
+                  <FiSearch size={16} style={{ marginRight: 8 }} />
+                  Buscar código
+                </button>
+              </div>
+            </div>
+
+            <div style={{ height: 14 }} />
+            {ultimoItemAdicionado && (
+              <>
+                <div style={styles.successBox}>
+                  Último item adicionado: <strong>{ultimoItemAdicionado.nome}</strong> · Qtd:{" "}
+                  <strong>{ultimoItemAdicionado.quantidade}</strong>
+                </div>
+                <div style={{ height: 14 }} />
+              </>
+            )}
+
+            <div style={{ height: 14 }} />
+
+            <div style={styles.card}>
+              <div style={styles.sectionHeader}>
+                <div style={styles.sectionTitle}>
+                  Últimos itens adicionados
+                </div>
+                <div style={styles.sectionHint}>
+                  {historicoItens.length} registro(s)
+                </div>
+              </div>
+
+              {historicoItens.length === 0 ? (
+                <div style={styles.emptyBox}>
+                  Nenhum item adicionado nesta sessão.
+                </div>
+              ) : (
+                <div style={styles.historyList}>
+                  {historicoItens.map((item, index) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        ...styles.historyItem,
+                        ...(index === 0 ? styles.historyItemHighlight : {}),
+                      }}
+                    >
+                      <div style={styles.historyTopRow}>
+                        <strong style={styles.historyName}>{item.nome}</strong>
+                        <span style={styles.historyTime}>{item.dataHora}</span>
+                      </div>
+
+                      <div style={styles.historyMeta}>
+                        <span>Código: {item.codigo}</span>
+                        <span>Qtd: {item.quantidade}</span>
+                      </div>
+
+                      {(item.lote || item.validade) && (
+                        <div style={styles.historyMeta}>
+                          <span>Lote: {item.lote || "-"}</span>
+                          <span>Validade: {item.validade || "-"}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={styles.card}>
+              <div style={styles.sectionHeader}>
+                <div style={styles.sectionTitle}>
+                  <FiSearch size={18} style={{ marginRight: 8 }} />
                   Produto lido
                 </div>
                 <div style={styles.sectionHint}>
                   {searchingProduct
                     ? "Buscando produto..."
                     : codigoLido
-                    ? `Código: ${codigoLido}`
-                    : "Nenhum código lido"}
+                      ? `Código: ${codigoLido}`
+                      : "Nenhum código lido"}
                 </div>
               </div>
 
@@ -566,6 +743,40 @@ export default function InventarioScanner() {
                         placeholder="Ex: 10"
                         style={styles.input}
                       />
+                    </div>
+
+                    <div style={styles.qtyShortcutRow}>
+                      <button
+                        type="button"
+                        style={styles.qtyShortcutButton}
+                        onClick={() => somarQuantidade(1)}
+                      >
+                        +1
+                      </button>
+
+                      <button
+                        type="button"
+                        style={styles.qtyShortcutButton}
+                        onClick={() => somarQuantidade(5)}
+                      >
+                        +5
+                      </button>
+
+                      <button
+                        type="button"
+                        style={styles.qtyShortcutButton}
+                        onClick={() => somarQuantidade(10)}
+                      >
+                        +10
+                      </button>
+
+                      <button
+                        type="button"
+                        style={styles.qtyShortcutButtonLight}
+                        onClick={limparQuantidade}
+                      >
+                        Limpar
+                      </button>
                     </div>
 
                     {produto.controla_lote && (
@@ -873,6 +1084,44 @@ const styles: Record<string, React.CSSProperties> = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
+    cursor: "pointer",
+  },
+  successBox: {
+    background: "#ecfdf5",
+    border: "1px solid #86efac",
+    color: "#166534",
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 14,
+    lineHeight: 1.4,
+  },
+
+  qtyShortcutRow: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, 1fr)",
+    gap: 8,
+    marginTop: 8,
+  },
+
+  qtyShortcutButton: {
+    border: "none",
+    background: "#2563eb",
+    color: "#fff",
+    borderRadius: 10,
+    padding: "12px 10px",
+    fontSize: 14,
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+
+  qtyShortcutButtonLight: {
+    border: "1px solid #dbe2ea",
+    background: "#fff",
+    color: "#334155",
+    borderRadius: 10,
+    padding: "12px 10px",
+    fontSize: 14,
+    fontWeight: 700,
     cursor: "pointer",
   },
 };
