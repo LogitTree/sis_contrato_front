@@ -4,7 +4,7 @@ import {
   useEffect,
   useState,
 } from 'react';
-import type { ReactNode } from "react" 
+import type { ReactNode } from "react";
 
 import api, { setAuthToken } from '../api/api';
 
@@ -21,6 +21,7 @@ type AuthContextData = {
   isAuthenticated: boolean;
   isAdmin: boolean;
   isGestor: boolean;
+  loading: boolean;
   login: (email: string, senha: string) => Promise<void>;
   logout: () => void;
 };
@@ -33,26 +34,34 @@ const AuthContext = createContext<AuthContextData>({} as AuthContextData);
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // 🔁 Reidrata sessão ao recarregar a página
   useEffect(() => {
     const token = localStorage.getItem('@contratos:token');
     const storedUser = localStorage.getItem('@contratos:user');
 
-    if (token && storedUser) {
-      setAuthToken(token);
-      setUser(JSON.parse(storedUser));
+    try {
+      if (token && storedUser) {
+        setAuthToken(token);
+        setUser(JSON.parse(storedUser));
+      }
+    } catch (error) {
+      console.error('Erro ao reidratar sessão:', error);
+      localStorage.removeItem('@contratos:token');
+      localStorage.removeItem('@contratos:user');
+      setAuthToken(null);
+      setUser(null);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
-  // 🔐 Login
   async function login(email: string, senha: string) {
     const response = await api.post('/auth/login', {
       email,
       senha,
     });
 
-    
     const { token, user } = response.data;
 
     localStorage.setItem('@contratos:token', token);
@@ -62,7 +71,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setUser(user);
   }
 
-  // 🚪 Logout
   function logout() {
     localStorage.removeItem('@contratos:token');
     localStorage.removeItem('@contratos:user');
@@ -78,6 +86,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         isAuthenticated: !!user,
         isAdmin: user?.perfil === 'ADMIN',
         isGestor: user?.perfil === 'GESTOR',
+        loading,
         login,
         logout,
       }}
@@ -87,7 +96,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
 }
 
-// 🔥 Hook padrão
 export function useAuth() {
   return useContext(AuthContext);
 }
