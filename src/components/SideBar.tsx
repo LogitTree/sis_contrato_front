@@ -14,6 +14,7 @@ import {
   FiActivity,
   FiLayers,
   FiGrid,
+  FiClipboard
 } from "react-icons/fi";
 
 export default function Sidebar() {
@@ -79,6 +80,11 @@ export default function Sidebar() {
       label: "Estoque por lote",
       icon: <FiBox size={16} />,
     },
+    {
+      label: "Inventário",
+      path: "/estoque/inventario",
+      icon: <FiClipboard size={16} />,
+    }
   ];
 
   const cadastrosActive = useMemo(

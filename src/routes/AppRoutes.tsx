@@ -39,6 +39,10 @@ import Fornecedor from "../pages/Fornecedores/List";
 import FornecedorCreate from "../pages/Fornecedores/Create";
 import FornecedorEdit from "../pages/Fornecedores/Edit";
 import EstoqueLotesList from "../pages/EstoqueLotes/List";
+import InventarioCreate from "../pages/Estoque/InventarioCreate";
+import InventarioList from "../pages/Estoque/InventarioList";
+import InventarioDetail from "../pages/Estoque/InventarioDetail";
+import InventarioScanner from "../pages/Estoque/InventarioScanner";
 
 export default function AppRoutes() {
   return (
@@ -50,6 +54,11 @@ export default function AppRoutes() {
 
           {/* Protegidas */}
           <Route element={<PrivateRoute />}>
+            {/* Rotas SEM layout */}
+            <Route path="/estoque/inventario/:id/scanner" element={<InventarioScanner />} />
+            <Route path="/estoque/inventario/scanner" element={<InventarioScanner />} />
+
+            {/* Rotas COM layout */}
             <Route element={<MainLayout />}>
               <Route path="/" element={<Dashboard />} />
 
@@ -91,7 +100,9 @@ export default function AppRoutes() {
               <Route path="/estoque" element={<EstoqueList />} />
               <Route path="/estoque/movimentacoes" element={<EstoqueMovimentacoes />} />
               <Route path="/estoque/lotes" element={<EstoqueLotesList />} />
-
+              <Route path="/estoque/inventario/novo" element={<InventarioCreate />} />
+              <Route path="/estoque/inventario" element={<InventarioList />} />
+              <Route path="/estoque/inventario/:id" element={<InventarioDetail />} />
 
               <Route path="/fornecedores" element={<Fornecedor />} />
               <Route path="/fornecedores/novo" element={<FornecedorCreate />} />
