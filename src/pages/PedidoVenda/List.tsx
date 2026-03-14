@@ -445,30 +445,6 @@ export default function PedidoVendaList() {
     return null;
   }
 
-  function calcTotalLiquidoFromItens(row: any): number | null {
-    const itens =
-      row?.itens ??
-      row?.PedidoVendaItems ??
-      row?.pedidoItens ??
-      row?.pedido_itens ??
-      row?.items ??
-      null;
-
-    if (!Array.isArray(itens)) return null;
-
-    let sum = 0;
-
-    for (const it of itens) {
-      const qtdExpedida = toNumberSafe(it?.qtd_expedida);
-      const qtdDevolvida = toNumberSafe(it?.qtd_devolvida);
-      const preco = toNumberSafe(it?.preco_unitario);
-
-      const qtdLiquida = Math.max(0, qtdExpedida - qtdDevolvida);
-      sum += qtdLiquida * preco;
-    }
-
-    return sum;
-  }
   function abrirModalStatus(pedido: any) {
     setStatusPedidoId(pedido.id);
     setNovoStatus((pedido.status as PedidoVendaStatus) || "RASCUNHO");
