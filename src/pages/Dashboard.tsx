@@ -1,7 +1,8 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { layoutStyles } from "../styles/layout";
 import { useAuth } from "../contexts/AuthContext";
+import api from "../api/api";
 
 import {
   ResponsiveContainer,
@@ -29,202 +30,219 @@ type UltimoContrato = {
   fim: string;
 };
 
+type DashboardKpis = {
+  contratosAtivos: number;
+  contratosVencer30d: number;
+  empresasAtivas: number;
+  orgaosCadastrados: number;
+  contratosAtivosHint?: string;
+  contratosVencer30dHint?: string;
+  empresasAtivasHint?: string;
+  orgaosCadastradosHint?: string;
+};
+
+type DashboardContratoMes = {
+  mes: string;
+  qtd: number;
+};
+
+type DashboardGastoOrgao = {
+  nome: string;
+  valor: number;
+};
+
+type DashboardStatus = {
+  name: string;
+  value: number;
+};
+
+type DashboardResponse = {
+  kpis: DashboardKpis;
+  contratosMes: DashboardContratoMes[];
+  gastosPorOrgao: DashboardGastoOrgao[];
+  statusContratos: DashboardStatus[];
+  ultimosContratos: UltimoContrato[];
+};
+
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
-  const { user, logout } = useAuth(); // ✅ add
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
 
   function handleLogout() {
     logout();
     navigate("/login", { replace: true });
   }
 
-  /* =========================
-     MOCK DATA (simulação)
-  ========================= */
-  const kpis = useMemo(
-    () => [
-      { label: "Contratos Ativos", value: 0, hint: "0 este mês" },
-      { label: "Contratos a Vencer (30d)", value: 0, hint: "atenção" },
-      { label: "Empresas Ativas", value: 0, hint: "0 este mês" },
-      { label: "Órgãos Cadastrados", value: 0, hint: "estável" },
-    ],
-    []
-  );
-
-  const contratosMes = useMemo(
-    () => [
-      { mes: "Ago", qtd: 10 },
-      { mes: "Set", qtd: 14 },
-      { mes: "Out", qtd: 12 },
-      { mes: "Nov", qtd: 18 },
-      { mes: "Dez", qtd: 16 },
-      { mes: "Jan", qtd: 22 },
-      { mes: "Fev", qtd: 19 },
-    ],
-    []
-  );
-
-  const gastosPorOrgao = useMemo(
-    () => [
-      { nome: "Saúde", valor: 180000 },
-      { nome: "Educação", valor: 145000 },
-      { nome: "Assistência", valor: 98000 },
-      { nome: "Infra", valor: 210000 },
-      { nome: "ADM", valor: 72000 },
-    ],
-    []
-  );
-
-  const statusContratos = useMemo(
-    () => [
-      { name: "Ativo", value: 42 },
-      { name: "Suspenso", value: 6 },
-      { name: "Encerrado", value: 14 },
-    ],
-    []
-  );
-
-  const ultimosContratos: UltimoContrato[] = useMemo(
-    () => [
-      {
-        id: 1,
-        numero: "001/2026",
-        orgao: "Saúde",
-        empresa: "Alpha LTDA",
-        status: "ATIVO",
-        valor: 85000,
-        inicio: "2026-01-10",
-        fim: "2026-12-31",
-      },
-      {
-        id: 2,
-        numero: "002/2026",
-        orgao: "Educação",
-        empresa: "Beta Serviços",
-        status: "ATIVO",
-        valor: 42000,
-        inicio: "2026-02-01",
-        fim: "2026-10-01",
-      },
-      {
-        id: 3,
-        numero: "098/2025",
-        orgao: "Infra",
-        empresa: "Gamma Fornecimentos",
-        status: "SUSPENSO",
-        valor: 120000,
-        inicio: "2025-09-15",
-        fim: "2026-09-15",
-      },
-      {
-        id: 4,
-        numero: "077/2025",
-        orgao: "ADM",
-        empresa: "Delta Comércio",
-        status: "ENCERRADO",
-        valor: 36000,
-        inicio: "2025-03-01",
-        fim: "2025-12-01",
-      },
-    ],
-    []
-  );
-
-  function moedaBR(v: number) {
-    return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  async function loadDashboard() {
+    try {
+      setLoading(true);
+      setError("");
+      const { data } = await api.get("/dashboard/resumo");
+      setDashboard(data);
+    } catch (err: any) {
+      console.error("Erro ao carregar dashboard:", err);
+      setError(
+        err?.response?.data?.error || "Não foi possível carregar a dashboard."
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
-  /* =========================
-     STYLES (no padrão do sistema)
-  ========================= */
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
+  const kpis = useMemo(
+    () => [
+      {
+        label: "Contratos Ativos",
+        value: dashboard?.kpis?.contratosAtivos ?? 0,
+        hint: dashboard?.kpis?.contratosAtivosHint ?? "sem dados",
+      },
+      {
+        label: "A vencer em 30 dias",
+        value: dashboard?.kpis?.contratosVencer30d ?? 0,
+        hint: dashboard?.kpis?.contratosVencer30dHint ?? "sem dados",
+      },
+      {
+        label: "Empresas Ativas",
+        value: dashboard?.kpis?.empresasAtivas ?? 0,
+        hint: dashboard?.kpis?.empresasAtivasHint ?? "sem dados",
+      },
+      {
+        label: "Órgãos Cadastrados",
+        value: dashboard?.kpis?.orgaosCadastrados ?? 0,
+        hint: dashboard?.kpis?.orgaosCadastradosHint ?? "sem dados",
+      },
+    ],
+    [dashboard]
+  );
+
+  const contratosMes = dashboard?.contratosMes ?? [];
+  const gastosPorOrgao = dashboard?.gastosPorOrgao ?? [];
+  const statusContratos = dashboard?.statusContratos ?? [];
+  const ultimosContratos = dashboard?.ultimosContratos ?? [];
+
+  function moedaBR(v: number) {
+    return Number(v || 0).toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    });
+  }
+
   const gridShortcuts: React.CSSProperties = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
     gap: 16,
-    marginTop: 16,
+    marginTop: 18,
+  };
+
+  const gridKpis: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "repeat(12, 1fr)",
+    gap: 16,
+    marginTop: 18,
   };
 
   const gridDashboard: React.CSSProperties = {
     display: "grid",
     gridTemplateColumns: "repeat(12, 1fr)",
-    gap: 16,
-    marginTop: 16,
+    gap: 18,
+    marginTop: 18,
   };
 
   const cardBase: React.CSSProperties = {
-    background: "#ffffff",
-    borderRadius: 12,
-    border: "1px solid #eef2f7",
-    padding: 16,
-    boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+    background: "linear-gradient(180deg, #ffffff 0%, #fcfdff 100%)",
+    borderRadius: 18,
+    border: "1px solid #e8eef5",
+    padding: 18,
+    boxShadow: "0 10px 30px rgba(15, 23, 42, 0.05)",
   };
 
   const sectionTitle: React.CSSProperties = {
-    fontSize: 14,
-    fontWeight: 800,
-    color: "#111827",
-    marginBottom: 10,
+    fontSize: 15,
+    fontWeight: 900,
+    color: "#0f172a",
+    marginBottom: 12,
+    letterSpacing: 0.2,
+  };
+
+  const cardHeaderLine: React.CSSProperties = {
+    height: 1,
+    background: "#edf2f7",
+    margin: "10px 0 4px",
   };
 
   const kpiCard: React.CSSProperties = {
     ...cardBase,
     display: "flex",
     flexDirection: "column",
-    gap: 6,
+    gap: 8,
+    minHeight: 116,
+    justifyContent: "center",
   };
 
   const kpiLabel: React.CSSProperties = {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 800,
-    letterSpacing: 0.4,
+    letterSpacing: 0.9,
     textTransform: "uppercase",
     color: "#64748b",
   };
 
   const kpiValue: React.CSSProperties = {
-    fontSize: 22,
+    fontSize: 30,
     fontWeight: 900,
-    color: "#111827",
-    lineHeight: "26px",
+    color: "#0f172a",
+    lineHeight: "32px",
   };
 
   const kpiHint: React.CSSProperties = {
     fontSize: 13,
     color: "#64748b",
+    fontWeight: 600,
   };
 
   const shortcutCard: React.CSSProperties = {
     ...cardBase,
     cursor: "pointer",
-    transition: "transform .18s ease, box-shadow .18s ease",
+    transition: "transform .18s ease, box-shadow .18s ease, border-color .18s ease",
+    padding: 18,
   };
 
   const shortcutTitle: React.CSSProperties = {
     fontSize: 15,
-    fontWeight: 800,
-    color: "#111827",
+    fontWeight: 900,
+    color: "#0f172a",
     marginBottom: 6,
   };
 
   const shortcutDesc: React.CSSProperties = {
     fontSize: 13,
     color: "#64748b",
+    lineHeight: 1.4,
   };
 
   const tableWrap: React.CSSProperties = {
     width: "100%",
     overflowX: "auto",
-    borderRadius: 10,
-    border: "1px solid #eef2f7",
+    borderRadius: 14,
+    border: "1px solid #e9eef5",
+    background: "#fff",
   };
 
   const table: React.CSSProperties = {
     width: "100%",
     borderCollapse: "separate",
     borderSpacing: 0,
-    minWidth: 640,
+    minWidth: 860,
     background: "#fff",
+    tableLayout: "fixed",
   };
 
   const th: React.CSSProperties = {
@@ -232,23 +250,28 @@ export default function Dashboard() {
     fontSize: 12,
     fontWeight: 800,
     color: "#64748b",
-    padding: "12px 12px",
+    padding: "14px 14px",
     background: "#f8fafc",
-    borderBottom: "1px solid #eef2f7",
+    borderBottom: "1px solid #e9eef5",
     position: "sticky",
     top: 0,
     zIndex: 1,
+    whiteSpace: "nowrap",
   };
 
   const td: React.CSSProperties = {
     fontSize: 13,
-    color: "#111827",
-    padding: "12px 12px",
+    color: "#0f172a",
+    padding: "13px 14px",
     borderBottom: "1px solid #f1f5f9",
-    whiteSpace: "nowrap",
+    verticalAlign: "middle",
+  };
+
+  const cellTruncate: React.CSSProperties = {
+    display: "block",
     overflow: "hidden",
     textOverflow: "ellipsis",
-    maxWidth: 1,
+    whiteSpace: "nowrap",
   };
 
   const rowHover: React.CSSProperties = {
@@ -262,17 +285,32 @@ export default function Dashboard() {
     const base: React.CSSProperties = {
       display: "inline-flex",
       alignItems: "center",
-      padding: "4px 10px",
+      justifyContent: "center",
+      minWidth: 98,
+      padding: "5px 10px",
       borderRadius: 999,
-      fontSize: 12,
+      fontSize: 11,
       fontWeight: 900,
       border: "1px solid #e5e7eb",
+      letterSpacing: 0.3,
     };
 
     const map: Record<UltimoContrato["status"], React.CSSProperties> = {
-      ATIVO: { background: "#ecfdf5", color: "#065f46", borderColor: "#a7f3d0" },
-      SUSPENSO: { background: "#fffbeb", color: "#92400e", borderColor: "#fde68a" },
-      ENCERRADO: { background: "#f1f5f9", color: "#334155", borderColor: "#e2e8f0" },
+      ATIVO: {
+        background: "#ecfdf5",
+        color: "#065f46",
+        borderColor: "#a7f3d0",
+      },
+      SUSPENSO: {
+        background: "#fffbeb",
+        color: "#92400e",
+        borderColor: "#fde68a",
+      },
+      ENCERRADO: {
+        background: "#f1f5f9",
+        color: "#334155",
+        borderColor: "#e2e8f0",
+      },
     };
 
     return <span style={{ ...base, ...map[status] }}>{status}</span>;
@@ -292,12 +330,14 @@ export default function Dashboard() {
         style={shortcutCard}
         onClick={() => navigate(path)}
         onMouseEnter={(e) => {
-          e.currentTarget.style.transform = "translateY(-3px)";
-          e.currentTarget.style.boxShadow = "0 10px 24px rgba(0,0,0,0.07)";
+          e.currentTarget.style.transform = "translateY(-4px)";
+          e.currentTarget.style.boxShadow = "0 18px 40px rgba(15, 23, 42, 0.08)";
+          e.currentTarget.style.borderColor = "#dbe7f3";
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.transform = "translateY(0)";
-          e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.06)";
+          e.currentTarget.style.boxShadow = "0 10px 30px rgba(15, 23, 42, 0.05)";
+          e.currentTarget.style.borderColor = "#e8eef5";
         }}
       >
         <div style={shortcutTitle}>{title}</div>
@@ -306,25 +346,89 @@ export default function Dashboard() {
     );
   }
 
+  if (loading) {
+    return (
+      <div style={layoutStyles.page}>
+        <div style={layoutStyles.header}>
+          <div>
+            <h1 style={layoutStyles.title}>Dashboard</h1>
+            <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
+              Carregando dados do sistema...
+            </div>
+          </div>
+        </div>
+
+        <div style={layoutStyles.content}>
+          <div style={layoutStyles.card}>Carregando dashboard...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={layoutStyles.page}>
+        <div style={layoutStyles.header}>
+          <div>
+            <h1 style={layoutStyles.title}>Dashboard</h1>
+            <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
+              Visão geral do sistema.
+            </div>
+          </div>
+        </div>
+
+        <div style={layoutStyles.content}>
+          <div
+            style={{
+              ...layoutStyles.card,
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              color: "#991b1b",
+            }}
+          >
+            <div style={{ fontWeight: 800, marginBottom: 8 }}>
+              Erro ao carregar a dashboard
+            </div>
+            <div style={{ marginBottom: 12 }}>{error}</div>
+
+            <button
+              onClick={loadDashboard}
+              style={{
+                height: 38,
+                padding: "0 14px",
+                borderRadius: 12,
+                border: "1px solid #fca5a5",
+                background: "#fff",
+                color: "#991b1b",
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+            >
+              Tentar novamente
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={layoutStyles.page}>
-      {/* HEADER */}
       <div style={layoutStyles.header}>
         <div>
           <h1 style={layoutStyles.title}>Dashboard</h1>
           <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
-            Visão geral do sistema.
+            Visão geral executiva do sistema.
           </div>
         </div>
 
-        {/* ✅ Usuário logado + sair */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div
             style={{
               display: "flex",
               flexDirection: "column",
               alignItems: "flex-end",
-              lineHeight: 1.2,
+              lineHeight: 1.25,
             }}
           >
             <div style={{ fontSize: 13, fontWeight: 900, color: "#0f172a" }}>
@@ -335,7 +439,7 @@ export default function Dashboard() {
                     marginLeft: 8,
                     fontSize: 11,
                     fontWeight: 900,
-                    padding: "3px 10px",
+                    padding: "4px 10px",
                     borderRadius: 999,
                     border: "1px solid #e2e8f0",
                     background: "#f8fafc",
@@ -355,9 +459,9 @@ export default function Dashboard() {
           <button
             onClick={handleLogout}
             style={{
-              height: 36,
-              padding: "0 12px",
-              borderRadius: 10,
+              height: 38,
+              padding: "0 14px",
+              borderRadius: 12,
               border: "1px solid #e5e7eb",
               background: "#fff",
               fontWeight: 900,
@@ -372,37 +476,38 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* 🔥 CONTENT SCROLLÁVEL */}
       <div style={layoutStyles.content}>
-        {/* Aviso */}
-        <div
-          style={{
-            marginTop: 6,
-            fontSize: 12,
-            fontWeight: 800,
-            color: "#b45309",
-            background: "#fffbeb",
-            border: "1px solid #fde68a",
-            padding: "8px 10px",
-            borderRadius: 8,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-          }}
-        >
-          🚧 Módulo em desenvolvimento — dados meramente ilustrativos.
-        </div>
-        <div style={layoutStyles.card}>
+        <div style={cardBase}>
           <div style={sectionTitle}>Atalhos do Sistema</div>
-          <div style={{ height: 1, background: "#eef2f7", margin: "10px 0 4px" }} />
+          <div style={cardHeaderLine} />
           <div style={gridShortcuts}>
-            <Shortcut title="Contratos" description="Gerencie contratos e vigências" path="/contratos" />
-            <Shortcut title="Produtos" description="Cadastro e controle de produtos" path="/produtos" />
-            <Shortcut title="Órgãos" description="Órgãos contratantes e vínculos" path="/orgaos" />
-            <Shortcut title="Empresas" description="Empresas contratadas e status" path="/empresas" />
+            <Shortcut
+              title="Contratos"
+              description="Gerencie contratos e vigências"
+              path="/contratos"
+            />
+
+            <Shortcut
+              title="Produtos"
+              description="Cadastro e controle de produtos"
+              path="/produtos"
+            />
+
+            <Shortcut
+              title="Vendas"
+              description="Pedidos de venda e entregas"
+              path="/pedidosvenda"
+            />
+
+            <Shortcut
+              title="Compras"
+              description="Controle de compras e recebimentos"
+              path="/compras"
+            />
           </div>
         </div>
-        <div style={gridDashboard}>
+
+        <div style={gridKpis}>
           {kpis.map((k) => (
             <div key={k.label} style={{ ...kpiCard, gridColumn: "span 3" }}>
               <div style={kpiLabel}>{k.label}</div>
@@ -412,28 +517,33 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* GRÁFICOS + TABELA */}
         <div style={gridDashboard}>
-          {/* Linha */}
           <div style={{ ...cardBase, gridColumn: "span 7" }}>
             <div style={sectionTitle}>Contratos por mês</div>
-            <div style={{ height: 260 }}>
+            <div style={cardHeaderLine} />
+            <div style={{ height: 285, marginTop: 10 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={contratosMes}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="mes" />
-                  <YAxis />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e8eef5" />
+                  <XAxis dataKey="mes" tick={{ fontSize: 12, fill: "#64748b" }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "#64748b" }} />
                   <Tooltip />
-                  <Line type="monotone" dataKey="qtd" strokeWidth={3} dot={false} />
+                  <Line
+                    type="monotone"
+                    dataKey="qtd"
+                    strokeWidth={3}
+                    dot={{ r: 3 }}
+                    activeDot={{ r: 5 }}
+                  />
                 </LineChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Pizza */}
           <div style={{ ...cardBase, gridColumn: "span 5" }}>
             <div style={sectionTitle}>Status dos contratos</div>
-            <div style={{ height: 260, display: "grid", placeItems: "center" }}>
+            <div style={cardHeaderLine} />
+            <div style={{ height: 285, display: "grid", placeItems: "center", marginTop: 10 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Tooltip />
@@ -441,8 +551,8 @@ export default function Dashboard() {
                     data={statusContratos}
                     dataKey="value"
                     nameKey="name"
-                    innerRadius={55}
-                    outerRadius={85}
+                    innerRadius={58}
+                    outerRadius={88}
                     paddingAngle={4}
                   >
                     {statusContratos.map((_, idx) => (
@@ -453,11 +563,25 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </div>
 
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 8 }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 14,
+                flexWrap: "wrap",
+                marginTop: 6,
+              }}
+            >
               {statusContratos.map((s, idx) => (
                 <div
                   key={s.name}
-                  style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#334155" }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontSize: 13,
+                    color: "#334155",
+                    fontWeight: 700,
+                  }}
                 >
                   <span
                     style={{
@@ -474,28 +598,52 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Barras */}
           <div style={{ ...cardBase, gridColumn: "span 6" }}>
             <div style={sectionTitle}>Gasto estimado por órgão</div>
-            <div style={{ height: 260 }}>
+            <div style={cardHeaderLine} />
+            <div style={{ height: 285, marginTop: 10 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={gastosPorOrgao}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="nome" />
-                  <YAxis />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e8eef5" />
+                  <XAxis dataKey="nome" tick={{ fontSize: 11, fill: "#64748b" }} />
+                  <YAxis tick={{ fontSize: 12, fill: "#64748b" }} />
                   <Tooltip formatter={(v: any) => moedaBR(Number(v))} />
-                  <Bar dataKey="valor" />
+                  <Bar dataKey="valor" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Últimos contratos */}
           <div style={{ ...cardBase, gridColumn: "span 6" }}>
-            <div style={sectionTitle}>Últimos contratos</div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                marginBottom: 12,
+              }}
+            >
+              <div style={sectionTitle}>Últimos contratos</div>
+
+              <button
+                style={cardLinkButton}
+                onClick={() => navigate("/contratos")}
+              >
+                Ver todos →
+              </button>
+            </div>
 
             <div style={tableWrap}>
               <table style={table}>
+                <colgroup>
+                  <col style={{ width: "16%" }} />
+                  <col style={{ width: "24%" }} />
+                  <col style={{ width: "28%" }} />
+                  <col style={{ width: "16%" }} />
+                  <col style={{ width: "16%" }} />
+                </colgroup>
+
                 <thead>
                   <tr>
                     <th style={th}>Contrato</th>
@@ -505,38 +653,71 @@ export default function Dashboard() {
                     <th style={{ ...th, textAlign: "right" }}>Valor</th>
                   </tr>
                 </thead>
+
                 <tbody>
-                  {ultimosContratos.map((c) => (
-                    <tr
-                      key={c.id}
-                      style={rowHover}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                      onClick={() => navigate(`/contratos/${c.id}/editar`)}
-                    >
-                      <td style={td}>{c.numero}</td>
-                      <td style={td}>{c.orgao}</td>
-                      <td style={td}>{c.empresa}</td>
-                      <td style={td}>
-                        <Badge status={c.status} />
-                      </td>
-                      <td style={{ ...td, textAlign: "right", fontWeight: 900 }}>
-                        {moedaBR(c.valor)}
+                  {ultimosContratos.length > 0 ? (
+                    ultimosContratos.map((c) => (
+                      <tr
+                        key={c.id}
+                        style={rowHover}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = "#f8fafc";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "transparent";
+                        }}
+                        onClick={() => navigate(`/contratos/${c.id}/editar`)}
+                      >
+                        <td style={td}>
+                          <span style={{ ...cellTruncate, fontWeight: 800 }}>
+                            {c.numero}
+                          </span>
+                        </td>
+
+                        <td style={td} title={c.orgao}>
+                          <span style={cellTruncate}>{c.orgao}</span>
+                        </td>
+
+                        <td style={td} title={c.empresa}>
+                          <span style={cellTruncate}>{c.empresa}</span>
+                        </td>
+
+                        <td style={td}>
+                          <Badge status={c.status} />
+                        </td>
+
+                        <td
+                          style={{
+                            ...td,
+                            textAlign: "right",
+                            fontWeight: 900,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {moedaBR(c.valor)}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        style={{
+                          ...td,
+                          textAlign: "center",
+                          color: "#64748b",
+                          padding: "24px 12px",
+                        }}
+                      >
+                        Nenhum contrato encontrado.
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
-
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-              <button style={cardLinkButton} onClick={() => navigate("/contratos")}>
-                Ver todos →
-              </button>
-            </div>
           </div>
         </div>
-
       </div>
     </div>
   );

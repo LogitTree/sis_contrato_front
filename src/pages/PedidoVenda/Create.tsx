@@ -25,10 +25,8 @@ type ContratoItemOption = {
   fator_multiplicacao?: string | number;
   preco_unitario_contratado?: string | number;
   qtd_maxima_contratada?: string | number;
-
-  // ✅ do backend
-  qtd_utilizada?: string | number;
   saldo_contrato?: string | number;
+  qtd_utilizada?: string | number;
 };
 
 type PedidoItem = {
@@ -37,8 +35,26 @@ type PedidoItem = {
   produto_id: number;
   qtd: string;
   preco_unitario: string;
+
   aprovado?: boolean;
   motivo_bloqueio?: string | null;
+
+  qtd_reservada?: string;
+  qtd_expedida?: string;
+  qtd_cancelada?: string;
+  qtd_devolvida?: string;
+
+  status_item?:
+    | "PENDENTE"
+    | "PARCIALMENTE_RESERVADO"
+    | "RESERVADO"
+    | "PARCIALMENTE_EXPEDIDO"
+    | "EXPEDIDO"
+    | "CANCELADO";
+
+  saldo_reservado?: number;
+  saldo_pendente?: number;
+  saldo_ativo?: number;
 
   produto?: { nome?: string };
   contrato_item?: { id: number };
@@ -46,9 +62,9 @@ type PedidoItem = {
 
 const LS_DRAFT_KEY = "pedidovenda_create_draft_v1";
 
-/** Converte strings BR/US para número */
 function toNumberAny(v: any): number {
   if (v === null || v === undefined) return 0;
+
   const s = String(v).trim();
   if (!s) return 0;
 
@@ -71,9 +87,8 @@ function toNumberAny(v: any): number {
 }
 
 /**
- * ✅ NORMALIZA DINHEIRO
- * Alguns endpoints retornam em centavos (ex: 1000000 = R$ 10.000,00).
- * Heurística: se for inteiro e >= 100000, assume centavos e divide por 100.
+ * Alguns endpoints retornam dinheiro em centavos.
+ * Heurística mantida do seu projeto.
  */
 function moneyFromApi(v: any): number {
   const n = toNumberAny(v);
@@ -83,14 +98,19 @@ function moneyFromApi(v: any): number {
 }
 
 function formatMoneyBR(n: number) {
-  return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function formatQtyBR(n: number) {
-  return n.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  return n.toLocaleString("pt-BR", {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  });
 }
 
-/** permite digitar decimal com vírgula/ponto, mas guarda normalizado */
 function normalizeDecimalString(v: string) {
   const clean = (v || "").replace(/[^\d.,]/g, "");
   const hasComma = clean.includes(",");
@@ -98,6 +118,80 @@ function normalizeDecimalString(v: string) {
   if (hasComma && hasDot) return clean.replace(/\./g, "").replace(",", ".");
   if (hasComma) return clean.replace(",", ".");
   return clean;
+}
+
+function statusItemStyle(status?: string): React.CSSProperties {
+  const s = String(status || "").toUpperCase();
+
+  if (s === "EXPEDIDO") {
+    return {
+      padding: "4px 10px",
+      borderRadius: 6,
+      fontSize: 12,
+      fontWeight: 700,
+      display: "inline-block",
+      background: "#dcfce7",
+      color: "#166534",
+    };
+  }
+
+  if (s === "PARCIALMENTE_EXPEDIDO") {
+    return {
+      padding: "4px 10px",
+      borderRadius: 6,
+      fontSize: 12,
+      fontWeight: 700,
+      display: "inline-block",
+      background: "#e0f2fe",
+      color: "#075985",
+    };
+  }
+
+  if (s === "RESERVADO") {
+    return {
+      padding: "4px 10px",
+      borderRadius: 6,
+      fontSize: 12,
+      fontWeight: 700,
+      display: "inline-block",
+      background: "#dbeafe",
+      color: "#1e40af",
+    };
+  }
+
+  if (s === "PARCIALMENTE_RESERVADO") {
+    return {
+      padding: "4px 10px",
+      borderRadius: 6,
+      fontSize: 12,
+      fontWeight: 700,
+      display: "inline-block",
+      background: "#fef3c7",
+      color: "#92400e",
+    };
+  }
+
+  if (s === "CANCELADO") {
+    return {
+      padding: "4px 10px",
+      borderRadius: 6,
+      fontSize: 12,
+      fontWeight: 700,
+      display: "inline-block",
+      background: "#fee2e2",
+      color: "#991b1b",
+    };
+  }
+
+  return {
+    padding: "4px 10px",
+    borderRadius: 6,
+    fontSize: 12,
+    fontWeight: 700,
+    display: "inline-block",
+    background: "#f8fafc",
+    color: "#475569",
+  };
 }
 
 export default function PedidoVendaCreate() {
@@ -108,27 +202,22 @@ export default function PedidoVendaCreate() {
   const [savingItem, setSavingItem] = useState(false);
   const [removingItemId, setRemovingItemId] = useState<number | null>(null);
 
-  // ===== combos =====
   const [contratosOptions, setContratosOptions] = useState<ContratoOption[]>([]);
   const [contratoItensOptions, setContratoItensOptions] = useState<ContratoItemOption[]>([]);
 
-  // ===== header form =====
   const [contratoId, setContratoId] = useState("");
   const [data, setData] = useState(() => new Date().toISOString().slice(0, 10));
   const [observacao, setObservacao] = useState("");
 
-  // ===== pedido criado =====
   const [pedidoId, setPedidoId] = useState<number | null>(null);
   const [itens, setItens] = useState<PedidoItem[]>([]);
 
-  // ===== item form =====
   const [contratoItemId, setContratoItemId] = useState("");
   const [produtoId, setProdutoId] = useState("");
   const [qtd, setQtd] = useState("");
 
   const qtdRef = useRef<HTMLInputElement | null>(null);
 
-  // ✅ helper com altura estável (melhor leitura, sem cortar)
   const helperLineStyle: React.CSSProperties = {
     marginTop: 8,
     fontSize: 12,
@@ -166,12 +255,14 @@ export default function PedidoVendaCreate() {
     try {
       const res = await api.get("/contratos", { params: { page: 1, limit: 500 } });
       const list = res.data?.data ?? res.data?.rows ?? [];
+
       const contratos = (Array.isArray(list) ? list : []).map((c: any) => ({
         id: c.id,
         numero: c.numero,
         orgaoNome: c.orgao?.nome ?? "",
         empresaNome: c.empresa?.razao_social ?? c.empresa?.nome_fantasia ?? "",
       }));
+
       setContratosOptions(contratos);
     } catch (err) {
       console.error(err);
@@ -180,10 +271,10 @@ export default function PedidoVendaCreate() {
     }
   }
 
-  // ✅ carrega itens do contrato + saldo_contrato vindo do backend
   async function loadContratoItens(contrato_id: number) {
     try {
       const res = await api.get(`/contratos/${contrato_id}`);
+
       const lista = (res.data?.itens ?? []).map((it: any) => ({
         id: it.id,
         produto_id: it.produto_id,
@@ -195,6 +286,7 @@ export default function PedidoVendaCreate() {
         saldo_contrato: it.saldo_contrato ?? it.saldoContrato ?? 0,
         qtd_utilizada: it.qtd_utilizada ?? it.qtdUtilizada ?? 0,
       }));
+
       setContratoItensOptions(lista);
     } catch (err) {
       console.error(err);
@@ -214,26 +306,30 @@ export default function PedidoVendaCreate() {
     }
   }
 
-  // restore draft do cabeçalho (se não salvou)
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LS_DRAFT_KEY);
       if (!raw) return;
+
       const draft = JSON.parse(raw);
       if (!draft) return;
+
       if (!pedidoId) {
         if (draft.contratoId) setContratoId(String(draft.contratoId));
         if (draft.data) setData(String(draft.data));
         if (draft.observacao !== undefined) setObservacao(String(draft.observacao ?? ""));
       }
     } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [pedidoId]);
 
   useEffect(() => {
     if (pedidoId) return;
+
     try {
-      localStorage.setItem(LS_DRAFT_KEY, JSON.stringify({ contratoId, data, observacao }));
+      localStorage.setItem(
+        LS_DRAFT_KEY,
+        JSON.stringify({ contratoId, data, observacao })
+      );
     } catch {}
   }, [contratoId, data, observacao, pedidoId]);
 
@@ -259,6 +355,7 @@ export default function PedidoVendaCreate() {
 
   useEffect(() => {
     const id = Number(contratoId);
+
     if (!id) {
       setContratoItensOptions([]);
       setContratoItemId("");
@@ -266,36 +363,35 @@ export default function PedidoVendaCreate() {
       setQtd("");
       return;
     }
+
     loadContratoItens(id);
     setContratoItemId("");
     setProdutoId("");
     setQtd("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contratoId]);
 
-  // ao selecionar item: preenche produto e foca qtd
   useEffect(() => {
     if (!contratoItemSelecionado) return;
     setProdutoId(String(contratoItemSelecionado.produto_id));
     setTimeout(() => qtdRef.current?.focus(), 60);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contratoItemId]);
+  }, [contratoItemSelecionado]);
 
-  // totais do pedido
   const totais = useMemo(() => {
     const totalItens = itens.length;
+
     const totalQtd = itens.reduce((acc, it) => acc + toNumberAny(it.qtd), 0);
+
     const totalValor = itens.reduce((acc, it) => {
       const q = toNumberAny(it.qtd);
       const p = moneyFromApi(it.preco_unitario);
       return acc + q * p;
     }, 0);
+
     return { totalItens, totalQtd, totalValor };
   }, [itens]);
 
   const qtdInformadaNum = useMemo(() => toNumberAny(qtd), [qtd]);
 
-  // ✅ SALDO DO CONTRATO (única regra)
   const saldoContratoSelecionado = useMemo(() => {
     if (!contratoItemSelecionado) return 0;
     return toNumberAny(contratoItemSelecionado.saldo_contrato);
@@ -309,9 +405,14 @@ export default function PedidoVendaCreate() {
 
   async function handleSalvarCabecalho(e: React.FormEvent) {
     e.preventDefault();
-    if (!contratoId) return toast.error("Selecione um contrato");
+
+    if (!contratoId) {
+      toast.error("Selecione um contrato");
+      return;
+    }
 
     setSavingHeader(true);
+
     try {
       const payload = {
         contrato_id: Number(contratoId),
@@ -319,10 +420,12 @@ export default function PedidoVendaCreate() {
         observacao: observacao?.trim() || null,
       };
 
-      // ✅ mantém como estava: precisa retornar id
       const res = await api.post("/pedidosvenda", payload);
       const id = res.data?.id;
-      if (!id) throw new Error("API não retornou o ID do pedido");
+
+      if (!id) {
+        throw new Error("API não retornou o ID do pedido");
+      }
 
       setPedidoId(id);
 
@@ -332,7 +435,10 @@ export default function PedidoVendaCreate() {
 
       toast.success("Pedido criado. Agora adicione os itens.");
       await loadPedido(id);
-      if (contratoId) await loadContratoItens(Number(contratoId));
+
+      if (contratoId) {
+        await loadContratoItens(Number(contratoId));
+      }
     } catch (err: any) {
       console.error(err);
       toast.error(err?.response?.data?.error || "Erro ao salvar cabeçalho");
@@ -349,7 +455,6 @@ export default function PedidoVendaCreate() {
     const qtdN = toNumberAny(qtd);
     if (!qtdN || qtdN <= 0) return toast.error("Informe a quantidade");
 
-    // ✅ valida pelo SALDO DO CONTRATO
     if (qtdExcedeSaldoContrato) {
       return toast.error("Quantidade excede o saldo do contrato para este item.");
     }
@@ -358,9 +463,12 @@ export default function PedidoVendaCreate() {
       ? moneyFromApi(contratoItemSelecionado.preco_unitario_contratado)
       : 0;
 
-    if (!precoContrato || precoContrato <= 0) return toast.error("Preço do contrato inválido");
+    if (!precoContrato || precoContrato <= 0) {
+      return toast.error("Preço do contrato inválido");
+    }
 
     setSavingItem(true);
+
     try {
       const payload = {
         contrato_item_id: Number(contratoItemId),
@@ -373,13 +481,14 @@ export default function PedidoVendaCreate() {
 
       toast.success("Item inserido");
 
-      // reset form
       setContratoItemId("");
       setProdutoId("");
       setQtd("");
 
       await loadPedido(pedidoId);
-      if (contratoId) await loadContratoItens(Number(contratoId));
+      if (contratoId) {
+        await loadContratoItens(Number(contratoId));
+      }
     } catch (err: any) {
       console.error(err);
       toast.error(err?.response?.data?.error || "Erro ao inserir item");
@@ -393,12 +502,15 @@ export default function PedidoVendaCreate() {
     if (!window.confirm("Remover este item?")) return;
 
     setRemovingItemId(itemId);
+
     try {
       await api.delete(`/pedidosvenda/${pedidoId}/itens/${itemId}`);
       toast.success("Item removido");
 
       await loadPedido(pedidoId);
-      if (contratoId) await loadContratoItens(Number(contratoId));
+      if (contratoId) {
+        await loadContratoItens(Number(contratoId));
+      }
     } catch (err: any) {
       console.error(err);
       toast.error(err?.response?.data?.error || "Erro ao remover item");
@@ -422,37 +534,27 @@ export default function PedidoVendaCreate() {
     !qtdExcedeSaldoContrato &&
     !!contratoItemSelecionado;
 
-  function statusStyle(aprovado?: boolean) {
-    return {
-      padding: "4px 10px",
-      borderRadius: 6,
-      fontSize: 12,
-      fontWeight: 700,
-      display: "inline-block",
-      background: aprovado ? "#dcfce7" : "#fef9c3",
-      color: aprovado ? "#166534" : "#854d0e",
-    } as React.CSSProperties;
-  }
-
   return (
     <div style={layoutStyles.page}>
-      {/* HEADER */}
       <div style={layoutStyles.header}>
         <div>
           <h1 style={layoutStyles.title}>
             {pedidoId ? `Pedido de Venda #${pedidoId}` : "Novo Pedido de Venda"}
           </h1>
           <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
-            {pedidoId ? "Cabeçalho criado. Insira os itens abaixo." : "Crie o cabeçalho e depois adicione os itens do pedido."}
+            {pedidoId
+              ? "Cabeçalho criado. Insira os itens abaixo."
+              : "Crie o cabeçalho e depois adicione os itens do pedido."}
           </div>
         </div>
       </div>
 
-      {/* CABEÇALHO */}
       <div style={layoutStyles.card}>
         <div style={sectionTitleStyle}>
           <div style={sectionLabelStyle}>Cabeçalho do Pedido</div>
-          <div style={sectionHintStyle}>{pedidoId ? "Salvo" : "Preencha e salve para liberar os itens"}</div>
+          <div style={sectionHintStyle}>
+            {pedidoId ? "Salvo" : "Preencha e salve para liberar os itens"}
+          </div>
         </div>
 
         <form onSubmit={handleSalvarCabecalho}>
@@ -460,12 +562,20 @@ export default function PedidoVendaCreate() {
             <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
               <div style={{ display: "flex", gap: 16, width: "100%", alignItems: "flex-end" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Contrato (Número - Órgão)</label>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
+                    Contrato (Número - Órgão)
+                  </label>
 
                   <select
                     value={contratoId}
                     onChange={(e) => setContratoId(e.target.value)}
-                    style={{ ...filterStyles.select, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
+                    style={{
+                      ...filterStyles.select,
+                      height: 38,
+                      padding: "0 12px",
+                      boxSizing: "border-box",
+                      width: "100%",
+                    }}
                     disabled={disableHeader}
                   >
                     <option value="">Selecione...</option>
@@ -495,7 +605,13 @@ export default function PedidoVendaCreate() {
                     type="date"
                     value={data}
                     onChange={(e) => setData(e.target.value)}
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
+                    style={{
+                      ...filterStyles.input,
+                      height: 38,
+                      padding: "0 12px",
+                      boxSizing: "border-box",
+                      width: "100%",
+                    }}
                     disabled={disableHeader}
                   />
 
@@ -513,7 +629,14 @@ export default function PedidoVendaCreate() {
                     value={observacao}
                     onChange={(e) => setObservacao(e.target.value)}
                     placeholder="Opcional"
-                    style={{ ...filterStyles.input, height: 120, padding: "10px 12px", boxSizing: "border-box", width: "100%", resize: "vertical" }}
+                    style={{
+                      ...filterStyles.input,
+                      height: 120,
+                      padding: "10px 12px",
+                      boxSizing: "border-box",
+                      width: "100%",
+                      resize: "vertical",
+                    }}
                     disabled={disableHeader}
                   />
                 </div>
@@ -522,11 +645,20 @@ export default function PedidoVendaCreate() {
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
-            <button type="button" style={buttonStyles.link} onClick={() => navigate(-1)} disabled={savingHeader}>
+            <button
+              type="button"
+              style={buttonStyles.link}
+              onClick={() => navigate(-1)}
+              disabled={savingHeader}
+            >
               Voltar
             </button>
 
-            <button type="submit" style={buttonStyles.primary} disabled={disableHeader || !contratoId}>
+            <button
+              type="submit"
+              style={buttonStyles.primary}
+              disabled={disableHeader || !contratoId}
+            >
               {savingHeader ? "Salvando..." : pedidoId ? "Salvo" : "Salvar Cabeçalho"}
             </button>
           </div>
@@ -535,7 +667,6 @@ export default function PedidoVendaCreate() {
 
       <div style={{ height: 22 }} />
 
-      {/* ITENS */}
       <div style={layoutStyles.card}>
         <div style={sectionTitleStyle}>
           <div style={sectionLabelStyle}>Itens do Pedido</div>
@@ -549,17 +680,26 @@ export default function PedidoVendaCreate() {
         <div style={layoutStyles.cardCompact}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
             <div style={{ display: "flex", gap: 16, alignItems: "flex-end", width: "100%" }}>
-              {/* select item */}
               <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Item do Contrato (Produto)</label>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
+                  Item do Contrato (Produto)
+                </label>
 
                 <select
                   value={contratoItemId}
                   onChange={(e) => setContratoItemId(e.target.value)}
-                  style={{ ...filterStyles.select, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
+                  style={{
+                    ...filterStyles.select,
+                    height: 38,
+                    padding: "0 12px",
+                    boxSizing: "border-box",
+                    width: "100%",
+                  }}
                   disabled={disableItem || !contratoId}
                 >
-                  <option value="">{pedidoId ? "Selecione..." : "Salve o cabeçalho primeiro"}</option>
+                  <option value="">
+                    {pedidoId ? "Selecione..." : "Salve o cabeçalho primeiro"}
+                  </option>
                   {contratoItensOptions.map((it) => (
                     <option key={it.id} value={String(it.id)}>
                       {it.produtoNome ? it.produtoNome : `Item #${it.id}`}
@@ -567,7 +707,6 @@ export default function PedidoVendaCreate() {
                   ))}
                 </select>
 
-                {/* ✅ visual melhor */}
                 <div style={helperLineStyle}>
                   {contratoItemSelecionado ? (
                     <>
@@ -591,7 +730,6 @@ export default function PedidoVendaCreate() {
                 </div>
               </div>
 
-              {/* qtd */}
               <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
                 <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Quantidade</label>
                 <input
@@ -612,16 +750,19 @@ export default function PedidoVendaCreate() {
                 />
                 <div style={helperLineStyle}>
                   {qtdExcedeSaldoContrato ? (
-                    <span style={{ color: "#b91c1c", fontWeight: 700 }}>Excede o saldo do contrato.</span>
+                    <span style={{ color: "#b91c1c", fontWeight: 700 }}>
+                      Excede o saldo do contrato.
+                    </span>
                   ) : (
                     "\u00A0"
                   )}
                 </div>
               </div>
 
-              {/* preço */}
               <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 260 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Preço Unitário (Contrato)</label>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
+                  Preço Unitário (Contrato)
+                </label>
                 <input
                   value={contratoItemSelecionado ? `R$ ${formatMoneyBR(precoContratoAtual)}` : ""}
                   readOnly
@@ -641,12 +782,18 @@ export default function PedidoVendaCreate() {
                 </div>
               </div>
 
-              {/* botão inserir */}
               <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 170 }}>
                 <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>&nbsp;</label>
                 <button
                   type="button"
-                  style={{ ...buttonStyles.primary, height: 38, padding: "0 12px", width: "100%", whiteSpace: "nowrap", fontSize: 13 }}
+                  style={{
+                    ...buttonStyles.primary,
+                    height: 38,
+                    padding: "0 12px",
+                    width: "100%",
+                    whiteSpace: "nowrap",
+                    fontSize: 13,
+                  }}
                   onClick={handleAddItem}
                   disabled={!canInsert}
                 >
@@ -661,7 +808,9 @@ export default function PedidoVendaCreate() {
         </div>
 
         <div style={{ paddingTop: 12, fontSize: 13, color: "#64748b" }}>
-          {pedidoId ? `Exibindo ${itens.length} item(ns)` : "Salve o cabeçalho para liberar os itens."}
+          {pedidoId
+            ? `Exibindo ${itens.length} item(ns)`
+            : "Salve o cabeçalho para liberar os itens."}
         </div>
 
         <div style={{ overflowX: "auto", marginTop: 12 }}>
@@ -669,12 +818,15 @@ export default function PedidoVendaCreate() {
             <thead>
               <tr>
                 <th style={{ ...tableStyles.th, width: 70 }}>ID</th>
-                <th style={{ ...tableStyles.th, width: "52%" }}>PRODUTO</th>
+                <th style={{ ...tableStyles.th, width: "30%" }}>PRODUTO</th>
                 <th style={{ ...tableStyles.th, width: 80, textAlign: "center" }}>UNID.</th>
-                <th style={{ ...tableStyles.th, width: 150, textAlign: "right" }}>QTD</th>
-                <th style={{ ...tableStyles.th, width: 170, textAlign: "right" }}>PREÇO UNIT.</th>
-                <th style={{ ...tableStyles.th, width: 190, textAlign: "right" }}>SUBTOTAL</th>
-                <th style={{ ...tableStyles.th, width: 130, textAlign: "center" }}>APROVADO</th>
+                <th style={{ ...tableStyles.th, width: 120, textAlign: "right" }}>QTD</th>
+                <th style={{ ...tableStyles.th, width: 120, textAlign: "right" }}>RESERVADA</th>
+                <th style={{ ...tableStyles.th, width: 120, textAlign: "right" }}>EXPEDIDA</th>
+                <th style={{ ...tableStyles.th, width: 120, textAlign: "right" }}>PENDENTE</th>
+                <th style={{ ...tableStyles.th, width: 160, textAlign: "right" }}>PREÇO UNIT.</th>
+                <th style={{ ...tableStyles.th, width: 180, textAlign: "right" }}>SUBTOTAL</th>
+                <th style={{ ...tableStyles.th, width: 170, textAlign: "center" }}>STATUS ITEM</th>
                 <th style={{ ...tableStyles.th, width: 90, textAlign: "center" }}>AÇÕES</th>
               </tr>
             </thead>
@@ -682,7 +834,7 @@ export default function PedidoVendaCreate() {
             <tbody>
               {!pedidoId && (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
+                  <td colSpan={11} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
                     Salve o cabeçalho para inserir itens.
                   </td>
                 </tr>
@@ -690,7 +842,7 @@ export default function PedidoVendaCreate() {
 
               {pedidoId && itens.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
+                  <td colSpan={11} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
                     Nenhum item inserido ainda.
                   </td>
                 </tr>
@@ -702,6 +854,13 @@ export default function PedidoVendaCreate() {
                   const precoN = moneyFromApi(it.preco_unitario);
                   const subtotal = qtdN * precoN;
 
+                  const qtdReservada = toNumberAny(it.qtd_reservada);
+                  const qtdExpedida = toNumberAny(it.qtd_expedida);
+                  const qtdCancelada = toNumberAny(it.qtd_cancelada);
+
+                  const saldoPendente =
+                    it.saldo_pendente ?? Math.max(0, qtdN - qtdCancelada - qtdExpedida);
+
                   const option = contratoItensOptions.find((x) => x.id === it.contrato_item_id);
                   const unid = option?.unidade_contratada ?? "UN";
                   const nome = it.produto?.nome || option?.produtoNome || `Produto #${it.produto_id}`;
@@ -710,28 +869,75 @@ export default function PedidoVendaCreate() {
                     <tr key={it.id} style={{ background: idx % 2 === 0 ? "#fff" : "#f9fafb" }}>
                       <td style={tableStyles.td}>{it.id}</td>
 
-                      <td style={{ ...tableStyles.td, whiteSpace: "normal", wordBreak: "break-word", lineHeight: 1.35 }} title={nome}>
+                      <td
+                        style={{
+                          ...tableStyles.td,
+                          whiteSpace: "normal",
+                          wordBreak: "break-word",
+                          lineHeight: 1.35,
+                        }}
+                        title={nome}
+                      >
                         <div style={{ fontWeight: 700, color: "#0f172a" }}>{nome}</div>
                         {it.motivo_bloqueio ? (
-                          <div style={{ marginTop: 6, fontSize: 12, color: "#b91c1c" }}>{it.motivo_bloqueio}</div>
+                          <div style={{ marginTop: 6, fontSize: 12, color: "#b91c1c" }}>
+                            {it.motivo_bloqueio}
+                          </div>
                         ) : null}
                       </td>
 
                       <td style={{ ...tableStyles.td, textAlign: "center" }}>{unid}</td>
 
-                      <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>{formatQtyBR(qtdN)}</td>
+                      <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>
+                        {formatQtyBR(qtdN)}
+                      </td>
 
-                      <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>R$ {formatMoneyBR(precoN)}</td>
+                      <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>
+                        {formatQtyBR(qtdReservada)}
+                      </td>
 
-                      <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8, fontWeight: 800 }}>R$ {formatMoneyBR(subtotal)}</td>
+                      <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>
+                        {formatQtyBR(qtdExpedida)}
+                      </td>
+
+                      <td
+                        style={{
+                          ...tableStyles.td,
+                          textAlign: "right",
+                          paddingRight: 8,
+                          fontWeight: 700,
+                        }}
+                      >
+                        {formatQtyBR(saldoPendente)}
+                      </td>
+
+                      <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>
+                        R$ {formatMoneyBR(precoN)}
+                      </td>
+
+                      <td
+                        style={{
+                          ...tableStyles.td,
+                          textAlign: "right",
+                          paddingRight: 8,
+                          fontWeight: 800,
+                        }}
+                      >
+                        R$ {formatMoneyBR(subtotal)}
+                      </td>
 
                       <td style={{ ...tableStyles.td, textAlign: "center" }}>
-                        <span style={statusStyle(it.aprovado)}>{it.aprovado ? "SIM" : "NÃO"}</span>
+                        <span style={statusItemStyle(it.status_item)}>
+                          {it.status_item || "PENDENTE"}
+                        </span>
                       </td>
 
                       <td style={{ ...tableStyles.td, textAlign: "center" }}>
                         <button
-                          style={{ ...buttonStyles.icon, opacity: removingItemId === it.id ? 0.6 : 1 }}
+                          style={{
+                            ...buttonStyles.icon,
+                            opacity: removingItemId === it.id ? 0.6 : 1,
+                          }}
                           onClick={() => handleRemoveItem(it.id)}
                           disabled={removingItemId === it.id || !pedidoId}
                           title="Remover item"
@@ -747,7 +953,11 @@ export default function PedidoVendaCreate() {
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
-          <button style={buttonStyles.link} onClick={() => navigate("/pedidosvenda")} disabled={savingItem || savingHeader}>
+          <button
+            style={buttonStyles.link}
+            onClick={() => navigate("/pedidosvenda")}
+            disabled={savingItem || savingHeader}
+          >
             Voltar para lista
           </button>
         </div>

@@ -22,9 +22,9 @@ type ProdutoForm = {
   grupo_id: string;
   subgrupo_id: string;
 
-  preco_referencia: string; // digits
-  custo_medio: string; // digits
-  ult_custo: string; // digits
+  preco_referencia: string;
+  custo_medio: string;
+  ult_custo: string;
 
   estoque_min: string;
   cod_barra: string;
@@ -33,7 +33,7 @@ type ProdutoForm = {
 };
 
 /* =========================
-   Money helpers (mask)
+   Money helpers
 ========================= */
 function cleanMoneyDigits(value: string) {
   return (value || "").replace(/\D/g, "");
@@ -63,6 +63,9 @@ export default function ProdutoCreate() {
   const [subgrupos, setSubgrupos] = useState<Subgrupo[]>([]);
   const [loadingGrupos, setLoadingGrupos] = useState(false);
   const [loadingSubgrupos, setLoadingSubgrupos] = useState(false);
+
+  const [controlaLote, setControlaLote] = useState(false);
+  const [controlaValidade, setControlaValidade] = useState(false);
 
   const [form, setForm] = useState<ProdutoForm>({
     nome: "",
@@ -136,6 +139,25 @@ export default function ProdutoCreate() {
     color: "#64748b",
   };
 
+  const checkboxGroup: React.CSSProperties = {
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+    minHeight: 30,
+    justifyContent: "center",
+    paddingTop: 0,
+  };
+
+  const checkboxLabel: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    fontSize: 12,
+    color: "#374151",
+    cursor: "pointer",
+    userSelect: "none",
+  };
+
   /* =========================
      Load Grupos
   ========================= */
@@ -194,6 +216,15 @@ export default function ProdutoCreate() {
     setLoading(true);
 
     try {
+      if (controlaValidade && !controlaLote) {
+        toast.error("Produto que controla validade deve controlar lote.");
+        setLoading(false);
+        return;
+      }
+      console.log({
+        controla_lote: controlaLote,
+        controla_validade: controlaValidade,
+      });
       await api.post("/produtos", {
         nome: form.nome,
         descricao: form.descricao,
@@ -208,6 +239,9 @@ export default function ProdutoCreate() {
 
         cod_barra: form.cod_barra || null,
         estoque_min: form.estoque_min ? Number(form.estoque_min) : 0,
+
+        controla_lote: controlaLote,
+        controla_validade: controlaValidade,
 
         ativo: form.status === "ATIVO",
       });
@@ -226,7 +260,6 @@ export default function ProdutoCreate() {
   ========================= */
   return (
     <div style={layoutStyles.page}>
-      {/* HEADER */}
       <div style={layoutStyles.header}>
         <div>
           <h1 style={layoutStyles.title}>Novo Produto</h1>
@@ -238,7 +271,6 @@ export default function ProdutoCreate() {
 
       <div style={layoutStyles.card}>
         <form onSubmit={handleSubmit} style={formStyles.form}>
-          {/* ===== Dados do Produto ===== */}
           <div style={sectionCard}>
             <div style={sectionHeaderRow}>
               <div style={sectionTitle}>Dados do Produto</div>
@@ -300,7 +332,6 @@ export default function ProdutoCreate() {
             </div>
           </div>
 
-          {/* ===== Classificação ===== */}
           <div style={sectionCard}>
             <div style={sectionHeaderRow}>
               <div style={sectionTitle}>Classificação</div>
@@ -358,7 +389,6 @@ export default function ProdutoCreate() {
             </div>
           </div>
 
-          {/* ===== Valores ===== */}
           <div style={sectionCard}>
             <div style={sectionHeaderRow}>
               <div style={sectionTitle}>Valores</div>
@@ -405,7 +435,6 @@ export default function ProdutoCreate() {
             </div>
           </div>
 
-          {/* ===== Complementos ===== */}
           <div style={sectionCard}>
             <div style={sectionHeaderRow}>
               <div style={sectionTitle}>Complementos</div>
@@ -438,10 +467,47 @@ export default function ProdutoCreate() {
                   placeholder="0"
                 />
               </div>
+
+              <div style={formStyles.field}>
+                <label style={labelSmall}>Controle de estoque</label>
+
+                <div style={checkboxGroup}>
+                  <label style={checkboxLabel}>
+                    <input
+                      type="checkbox"
+                      checked={controlaLote}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+
+                        if (!checked && controlaValidade) return;
+
+                        setControlaLote(checked);
+                      }}
+                    />
+                    Controla lote
+                  </label>
+
+                  <label style={checkboxLabel}>
+                    <input
+                      type="checkbox"
+                      checked={controlaValidade}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+
+                        setControlaValidade(checked);
+
+                        if (checked) {
+                          setControlaLote(true);
+                        }
+                      }}
+                    />
+                    Controla validade
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* ===== Actions fixas no rodapé ===== */}
           <div
             style={{
               marginTop: "auto",

@@ -38,6 +38,7 @@ import EstoqueMovimentacoes from "../pages/Estoque/Movimentacoes";
 import Fornecedor from "../pages/Fornecedores/List";
 import FornecedorCreate from "../pages/Fornecedores/Create";
 import FornecedorEdit from "../pages/Fornecedores/Edit";
+import EstoqueLotesList from "../pages/EstoqueLotes/List";
 
 export default function AppRoutes() {
   return (
@@ -89,6 +90,8 @@ export default function AppRoutes() {
 
               <Route path="/estoque" element={<EstoqueList />} />
               <Route path="/estoque/movimentacoes" element={<EstoqueMovimentacoes />} />
+              <Route path="/estoque/lotes" element={<EstoqueLotesList />} />
+
 
               <Route path="/fornecedores" element={<Fornecedor />} />
               <Route path="/fornecedores/novo" element={<FornecedorCreate />} />

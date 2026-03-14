@@ -8,7 +8,7 @@ import { buttonStyles } from "../../styles/buttons";
 import { tableStyles } from "../../styles/table";
 import { filterStyles } from "../../styles/filters";
 
-import { FiTrash2, FiCheckCircle, FiXCircle } from "react-icons/fi";
+import { FiTrash2, FiCheckCircle, FiXCircle, FiSend, FiCornerUpLeft } from "react-icons/fi";
 
 type ContratoOption = {
   id: number;
@@ -25,6 +25,8 @@ type ContratoItemOption = {
   fator_multiplicacao?: string | number;
   preco_unitario_contratado?: string | number;
   qtd_maxima_contratada?: string | number;
+  saldo_contrato?: string | number;
+  qtd_utilizada?: string | number;
 };
 
 type PedidoItem = {
@@ -36,8 +38,39 @@ type PedidoItem = {
   aprovado?: boolean | null;
   motivo_bloqueio?: string | null;
 
-  produto?: { nome?: string };
-  contrato_item?: { id: number };
+  qtd_reservada?: string;
+  qtd_expedida?: string;
+  qtd_cancelada?: string;
+  qtd_devolvida?: string;
+
+  status_item?:
+  | "PENDENTE"
+  | "PARCIALMENTE_RESERVADO"
+  | "RESERVADO"
+  | "PARCIALMENTE_EXPEDIDO"
+  | "EXPEDIDO"
+  | "CANCELADO";
+
+  saldo_reservado?: number;
+  saldo_pendente?: number;
+  saldo_ativo?: number;
+
+  produto?: {
+    nome?: string;
+    controla_lote?: boolean;
+    controla_validade?: boolean;
+  };
+  contrato_item?: { id?: number };
+};
+
+type LoteDisponivel = {
+  id: number;
+  produto_id: number;
+  lote: string;
+  validade: string | null;
+  quantidade: number;
+  custo?: number;
+  situacao_validade?: string;
 };
 
 function toNumberAny(v: any): number {
@@ -69,11 +102,17 @@ function moneyFromApi(v: any): number {
 }
 
 function formatMoneyBR(n: number) {
-  return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function formatQtyBR(n: number) {
-  return n.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  return n.toLocaleString("pt-BR", {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  });
 }
 
 function normalizeDecimalString(v: string) {
@@ -83,6 +122,92 @@ function normalizeDecimalString(v: string) {
   if (hasComma && hasDot) return clean.replace(/\./g, "").replace(",", ".");
   if (hasComma) return clean.replace(",", ".");
   return clean;
+}
+
+function statusItemStyle(status?: string): React.CSSProperties {
+  const s = String(status || "").toUpperCase();
+
+  if (s === "EXPEDIDO") {
+    return {
+      padding: "4px 10px",
+      borderRadius: 6,
+      fontSize: 12,
+      fontWeight: 700,
+      display: "inline-block",
+      background: "#dcfce7",
+      color: "#166534",
+    };
+  }
+
+  if (s === "PARCIALMENTE_EXPEDIDO") {
+    return {
+      padding: "4px 10px",
+      borderRadius: 6,
+      fontSize: 12,
+      fontWeight: 700,
+      display: "inline-block",
+      background: "#e0f2fe",
+      color: "#075985",
+    };
+  }
+
+  if (s === "RESERVADO") {
+    return {
+      padding: "4px 10px",
+      borderRadius: 6,
+      fontSize: 12,
+      fontWeight: 700,
+      display: "inline-block",
+      background: "#dbeafe",
+      color: "#1e40af",
+    };
+  }
+
+  if (s === "PARCIALMENTE_RESERVADO") {
+    return {
+      padding: "4px 10px",
+      borderRadius: 6,
+      fontSize: 12,
+      fontWeight: 700,
+      display: "inline-block",
+      background: "#fef3c7",
+      color: "#92400e",
+    };
+  }
+
+  if (s === "CANCELADO") {
+    return {
+      padding: "4px 10px",
+      borderRadius: 6,
+      fontSize: 12,
+      fontWeight: 700,
+      display: "inline-block",
+      background: "#fee2e2",
+      color: "#991b1b",
+    };
+  }
+
+  return {
+    padding: "4px 10px",
+    borderRadius: 6,
+    fontSize: 12,
+    fontWeight: 700,
+    display: "inline-block",
+    background: "#f8fafc",
+    color: "#475569",
+  };
+}
+
+function situacaoValidadeLabel(situacao?: string) {
+  const s = String(situacao || "").toUpperCase();
+
+  if (s === "VENCIDO") return { label: "Vencido", color: "#991b1b", bg: "#fee2e2" };
+  if (s === "VENCE_30") return { label: "Vence em até 30 dias", color: "#92400e", bg: "#fef3c7" };
+  if (s === "VENCE_60") return { label: "Vence em até 60 dias", color: "#9a3412", bg: "#ffedd5" };
+  if (s === "VENCE_90") return { label: "Vence em até 90 dias", color: "#075985", bg: "#e0f2fe" };
+  if (s === "OK") return { label: "OK", color: "#166534", bg: "#dcfce7" };
+
+  return { label: "Sem validade", color: "#475569", bg: "#f8fafc" };
 }
 
 export default function PedidoVendaEdit() {
@@ -95,30 +220,44 @@ export default function PedidoVendaEdit() {
   const [savingItem, setSavingItem] = useState(false);
   const [removingItemId, setRemovingItemId] = useState<number | null>(null);
 
-  // combos
   const [contratosOptions, setContratosOptions] = useState<ContratoOption[]>([]);
   const [contratoItensOptions, setContratoItensOptions] = useState<ContratoItemOption[]>([]);
 
-  // header form
   const [contratoId, setContratoId] = useState("");
   const [data, setData] = useState("");
   const [observacao, setObservacao] = useState("");
+  const [pedidoStatus, setPedidoStatus] = useState("");
 
-  // itens do pedido
   const [itens, setItens] = useState<PedidoItem[]>([]);
 
-  // item form
   const [contratoItemId, setContratoItemId] = useState("");
   const [produtoId, setProdutoId] = useState("");
   const [qtd, setQtd] = useState("");
 
   const qtdRef = useRef<HTMLInputElement | null>(null);
 
-  // ====== APROVAÇÃO / REPROVAÇÃO ======
   const [togglingItemId, setTogglingItemId] = useState<number | null>(null);
   const [motivoModalOpen, setMotivoModalOpen] = useState(false);
   const [motivoTexto, setMotivoTexto] = useState("");
   const [itemParaReprovar, setItemParaReprovar] = useState<PedidoItem | null>(null);
+
+  const [baixaModalOpen, setBaixaModalOpen] = useState(false);
+  const [itemBaixa, setItemBaixa] = useState<PedidoItem | null>(null);
+  const [qtdBaixa, setQtdBaixa] = useState("");
+  const [baixandoItemId, setBaixandoItemId] = useState<number | null>(null);
+
+  const [lotesDisponiveis, setLotesDisponiveis] = useState<LoteDisponivel[]>([]);
+  const [loadingLotes, setLoadingLotes] = useState(false);
+  const [estoqueLoteId, setEstoqueLoteId] = useState("");
+
+  const [devolucaoModalOpen, setDevolucaoModalOpen] = useState(false);
+  const [itemDevolucao, setItemDevolucao] = useState<PedidoItem | null>(null);
+  const [qtdDevolucao, setQtdDevolucao] = useState("");
+  const [devolvendoItemId, setDevolvendoItemId] = useState<number | null>(null);
+
+  const [lotesDevolucao, setLotesDevolucao] = useState<LoteDisponivel[]>([]);
+  const [loadingLotesDevolucao, setLoadingLotesDevolucao] = useState(false);
+  const [estoqueLoteIdDevolucao, setEstoqueLoteIdDevolucao] = useState("");
 
   function openReprovarModal(item: PedidoItem) {
     setItemParaReprovar(item);
@@ -130,6 +269,113 @@ export default function PedidoVendaEdit() {
     setMotivoModalOpen(false);
     setItemParaReprovar(null);
     setMotivoTexto("");
+  }
+
+  async function openBaixaModal(item: PedidoItem) {
+    setItemBaixa(item);
+    setQtdBaixa("");
+    setEstoqueLoteId("");
+    setLotesDisponiveis([]);
+    setBaixaModalOpen(true);
+
+    if (item.produto?.controla_lote) {
+      try {
+        setLoadingLotes(true);
+
+        const res = await api.get(
+          `/pedidosvenda/${pedidoId}/itens/${item.id}/lotes-disponiveis`
+        );
+
+        const lista = Array.isArray(res.data?.data) ? res.data.data : [];
+        setLotesDisponiveis(lista);
+      } catch (err: any) {
+        console.error(err);
+        toast.error(err?.response?.data?.error || "Erro ao carregar lotes disponíveis");
+        setLotesDisponiveis([]);
+      } finally {
+        setLoadingLotes(false);
+      }
+    }
+  }
+
+  function closeBaixaModal() {
+    setBaixaModalOpen(false);
+    setItemBaixa(null);
+    setQtdBaixa("");
+    setEstoqueLoteId("");
+    setLotesDisponiveis([]);
+    setLoadingLotes(false);
+  }
+
+  async function openDevolucaoModal(item: PedidoItem) {
+    setItemDevolucao(item);
+    setQtdDevolucao("");
+    setEstoqueLoteIdDevolucao("");
+    setLotesDevolucao([]);
+    setDevolucaoModalOpen(true);
+
+    if (item.produto?.controla_lote) {
+      try {
+        setLoadingLotesDevolucao(true);
+
+        const res = await api.get(
+          `/pedidosvenda/${pedidoId}/itens/${item.id}/lotes-disponiveis`
+        );
+
+        const lista = Array.isArray(res.data?.data) ? res.data.data : [];
+        setLotesDevolucao(lista);
+      } catch (err: any) {
+        console.error(err);
+        toast.error(err?.response?.data?.error || "Erro ao carregar lotes para devolução");
+        setLotesDevolucao([]);
+      } finally {
+        setLoadingLotesDevolucao(false);
+      }
+    }
+  }
+
+  function closeDevolucaoModal() {
+    setDevolucaoModalOpen(false);
+    setItemDevolucao(null);
+    setQtdDevolucao("");
+    setEstoqueLoteIdDevolucao("");
+    setLotesDevolucao([]);
+    setLoadingLotesDevolucao(false);
+  }
+
+  async function handleDevolverItem() {
+    if (!pedidoId || !itemDevolucao) return;
+
+    const qtdN = toNumberAny(qtdDevolucao);
+    if (!qtdN || qtdN <= 0) {
+      toast.error("Informe a quantidade para devolução");
+      return;
+    }
+
+    const controlaLote = !!itemDevolucao.produto?.controla_lote;
+
+    if (controlaLote && !estoqueLoteIdDevolucao) {
+      toast.error("Selecione o lote para devolução");
+      return;
+    }
+
+    setDevolvendoItemId(itemDevolucao.id);
+
+    try {
+      await api.post(`/pedidosvenda/${pedidoId}/itens/${itemDevolucao.id}/devolver`, {
+        qtd_devolucao: String(qtdN),
+        estoque_lote_id: controlaLote ? Number(estoqueLoteIdDevolucao) : undefined,
+      });
+
+      toast.success("Devolução realizada");
+      closeDevolucaoModal();
+      await loadPedidoAndFill();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.response?.data?.error || "Erro ao devolver item");
+    } finally {
+      setDevolvendoItemId(null);
+    }
   }
 
   async function handleAprovarItem(itemId: number) {
@@ -170,16 +416,51 @@ export default function PedidoVendaEdit() {
     }
   }
 
+  async function handleBaixarItem() {
+    if (!pedidoId || !itemBaixa) return;
+
+    const qtdN = toNumberAny(qtdBaixa);
+    if (!qtdN || qtdN <= 0) {
+      toast.error("Informe a quantidade para baixa");
+      return;
+    }
+
+    const controlaLote = !!itemBaixa.produto?.controla_lote;
+
+    if (controlaLote && !estoqueLoteId) {
+      toast.error("Selecione o lote para realizar a baixa");
+      return;
+    }
+
+    setBaixandoItemId(itemBaixa.id);
+
+    try {
+      await api.post(`/pedidosvenda/${pedidoId}/itens/${itemBaixa.id}/baixar`, {
+        qtd_baixa: String(qtdN),
+        estoque_lote_id: controlaLote ? Number(estoqueLoteId) : undefined,
+      });
+
+      toast.success("Baixa realizada");
+      closeBaixaModal();
+      await loadPedidoAndFill();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.response?.data?.error || "Erro ao realizar baixa");
+    } finally {
+      setBaixandoItemId(null);
+    }
+  }
+
   const helperLineStyle: React.CSSProperties = {
     marginTop: 8,
     fontSize: 12,
     color: "#64748b",
-    height: 34,
+    minHeight: 42,
     lineHeight: "17px",
     overflow: "hidden",
     display: "-webkit-box",
     WebkitBoxOrient: "vertical" as any,
-    WebkitLineClamp: 2 as any,
+    WebkitLineClamp: 3 as any,
   };
 
   const sectionTitleStyle: React.CSSProperties = {
@@ -234,6 +515,8 @@ export default function PedidoVendaEdit() {
       fator_multiplicacao: it.fator_multiplicacao ?? 1,
       preco_unitario_contratado: it.preco_unitario_contratado ?? "",
       qtd_maxima_contratada: it.qtd_maxima_contratada ?? "",
+      saldo_contrato: it.saldo_contrato ?? it.saldoContrato ?? 0,
+      qtd_utilizada: it.qtd_utilizada ?? it.qtdUtilizada ?? 0,
     }));
     setContratoItensOptions(lista);
   }
@@ -255,11 +538,57 @@ export default function PedidoVendaEdit() {
     setContratoId(String(contrato_id));
     setData(String(dataApi).slice(0, 10));
     setObservacao(obsApi === null || obsApi === undefined ? "" : String(obsApi));
+    setPedidoStatus(String(pedido?.status ?? ""));
 
     setItens(Array.isArray(pedido?.itens) ? pedido.itens : []);
   }
 
-  // INIT (reset + load)
+  function getStatusItemVisual(it: PedidoItem) {
+    const expedida = toNumberAny(it.qtd_expedida);
+    const devolvida = toNumberAny(it.qtd_devolvida);
+    const status = String(it.status_item || "").toUpperCase();
+
+    if (expedida > 0 && devolvida >= expedida) {
+      return "DEVOLVIDO";
+    }
+
+    if (devolvida > 0 && devolvida < expedida) {
+      return "PARCIALMENTE_DEVOLVIDO";
+    }
+
+    return status || "PENDENTE";
+  }
+
+  function statusItemVisualStyle(status?: string): React.CSSProperties {
+    const s = String(status || "").toUpperCase();
+
+    if (s === "DEVOLVIDO") {
+      return {
+        padding: "4px 10px",
+        borderRadius: 6,
+        fontSize: 12,
+        fontWeight: 700,
+        display: "inline-block",
+        background: "#fef3c7",
+        color: "#92400e",
+      };
+    }
+
+    if (s === "PARCIALMENTE_DEVOLVIDO") {
+      return {
+        padding: "4px 10px",
+        borderRadius: 6,
+        fontSize: 12,
+        fontWeight: 700,
+        display: "inline-block",
+        background: "#ffedd5",
+        color: "#9a3412",
+      };
+    }
+
+    return statusItemStyle(s);
+  }
+
   useEffect(() => {
     (async () => {
       try {
@@ -268,6 +597,7 @@ export default function PedidoVendaEdit() {
         setContratoId("");
         setData("");
         setObservacao("");
+        setPedidoStatus("");
         setItens([]);
         setContratoItensOptions([]);
         setContratoItemId("");
@@ -286,7 +616,6 @@ export default function PedidoVendaEdit() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pedidoId]);
 
-  // quando contratoId muda, carrega itens do contrato
   useEffect(() => {
     const id = Number(contratoId);
     if (!id) {
@@ -325,7 +654,7 @@ export default function PedidoVendaEdit() {
     if (!contratoItemSelecionado) return;
     setProdutoId(String(contratoItemSelecionado.produto_id));
     setTimeout(() => qtdRef.current?.focus(), 60);
-  }, [contratoItemId, contratoItemSelecionado]);
+  }, [contratoItemSelecionado]);
 
   const totais = useMemo(() => {
     const totalItens = itens.length;
@@ -335,33 +664,28 @@ export default function PedidoVendaEdit() {
       const p = moneyFromApi(it.preco_unitario);
       return acc + q * p;
     }, 0);
-    return { totalItens, totalQtd, totalValor };
+    const totalLiquido = itens.reduce((acc, it) => {
+      const expedida = toNumberAny(it.qtd_expedida);
+      const devolvida = toNumberAny(it.qtd_devolvida);
+      const liquida = Math.max(0, expedida - devolvida);
+      const preco = moneyFromApi(it.preco_unitario);
+      return acc + liquida * preco;
+    }, 0);
+    return { totalItens, totalQtd, totalValor, totalLiquido };
   }, [itens]);
-
-  const qtdJaInseridaNoMesmoContratoItem = useMemo(() => {
-    const id = Number(contratoItemId);
-    if (!id) return 0;
-    return itens.reduce((acc, it) => (it.contrato_item_id === id ? acc + toNumberAny(it.qtd) : acc), 0);
-  }, [itens, contratoItemId]);
-
-  const qtdMaxContratoItem = useMemo(() => {
-    if (!contratoItemSelecionado) return 0;
-    return toNumberAny(contratoItemSelecionado.qtd_maxima_contratada);
-  }, [contratoItemSelecionado]);
-
-  const saldoDisponivelNoPedido = useMemo(() => {
-    if (!qtdMaxContratoItem) return 0;
-    return Math.max(0, qtdMaxContratoItem - qtdJaInseridaNoMesmoContratoItem);
-  }, [qtdMaxContratoItem, qtdJaInseridaNoMesmoContratoItem]);
 
   const qtdInformadaNum = useMemo(() => toNumberAny(qtd), [qtd]);
 
-  const qtdExcedeMax = useMemo(() => {
+  const saldoContratoSelecionado = useMemo(() => {
+    if (!contratoItemSelecionado) return 0;
+    return toNumberAny(contratoItemSelecionado.saldo_contrato);
+  }, [contratoItemSelecionado]);
+
+  const qtdExcedeSaldoContrato = useMemo(() => {
     if (!contratoItemSelecionado) return false;
-    if (!qtdMaxContratoItem) return false;
     if (!qtdInformadaNum) return false;
-    return qtdJaInseridaNoMesmoContratoItem + qtdInformadaNum > qtdMaxContratoItem;
-  }, [contratoItemSelecionado, qtdMaxContratoItem, qtdJaInseridaNoMesmoContratoItem, qtdInformadaNum]);
+    return qtdInformadaNum > saldoContratoSelecionado;
+  }, [contratoItemSelecionado, qtdInformadaNum, saldoContratoSelecionado]);
 
   async function handleSalvarCabecalho(e: React.FormEvent) {
     e.preventDefault();
@@ -395,10 +719,18 @@ export default function PedidoVendaEdit() {
 
     const qtdN = toNumberAny(qtd);
     if (!qtdN || qtdN <= 0) return toast.error("Informe a quantidade");
-    if (qtdExcedeMax) return toast.error("Quantidade excede o máximo contratado (no pedido).");
 
-    const precoContrato = contratoItemSelecionado ? moneyFromApi(contratoItemSelecionado.preco_unitario_contratado) : 0;
-    if (!precoContrato || precoContrato <= 0) return toast.error("Preço do contrato inválido");
+    if (qtdExcedeSaldoContrato) {
+      return toast.error("Quantidade excede o saldo do contrato para este item.");
+    }
+
+    const precoContrato = contratoItemSelecionado
+      ? moneyFromApi(contratoItemSelecionado.preco_unitario_contratado)
+      : 0;
+
+    if (!precoContrato || precoContrato <= 0) {
+      return toast.error("Preço do contrato inválido");
+    }
 
     setSavingItem(true);
     try {
@@ -417,6 +749,7 @@ export default function PedidoVendaEdit() {
       setQtd("");
 
       await loadPedidoAndFill();
+      if (contratoId) await loadContratoItens(Number(contratoId));
     } catch (err: any) {
       console.error(err);
       toast.error(err?.response?.data?.error || "Erro ao inserir item");
@@ -434,6 +767,7 @@ export default function PedidoVendaEdit() {
       await api.delete(`/pedidosvenda/${pedidoId}/itens/${itemId}`);
       toast.success("Item removido");
       await loadPedidoAndFill();
+      if (contratoId) await loadContratoItens(Number(contratoId));
     } catch (err: any) {
       console.error(err);
       toast.error(err?.response?.data?.error || "Erro ao remover item");
@@ -441,14 +775,27 @@ export default function PedidoVendaEdit() {
       setRemovingItemId(null);
     }
   }
+  const canEditHeader = pedidoStatus === "RASCUNHO";
+  const canManageDraftItems = pedidoStatus === "RASCUNHO";
+  const canBaixarItens =
+    pedidoStatus === "APROVADO" || pedidoStatus === "PARCIALMENTE_ATENDIDO";
+  const canDevolverItens =
+    pedidoStatus === "ATENDIDO" || pedidoStatus === "CONCLUIDO";
 
-  const disableHeader = loading || savingHeader;
-  const disableItem = loading || savingItem;
+  const disableHeader = loading || savingHeader || !canEditHeader;
+  const disableItem = loading || savingItem || !canManageDraftItems;
 
-  const precoContratoAtual = contratoItemSelecionado ? moneyFromApi(contratoItemSelecionado.preco_unitario_contratado) : 0;
+  const precoContratoAtual = contratoItemSelecionado
+    ? moneyFromApi(contratoItemSelecionado.preco_unitario_contratado)
+    : 0;
 
   const canInsert =
-    !disableItem && !!contratoItemId && !!qtd && toNumberAny(qtd) > 0 && !qtdExcedeMax && !!contratoItemSelecionado;
+    !disableItem &&
+    !!contratoItemId &&
+    !!qtd &&
+    toNumberAny(qtd) > 0 &&
+    !qtdExcedeSaldoContrato &&
+    !!contratoItemSelecionado;
 
   const itemGridStyle: React.CSSProperties = {
     display: "grid",
@@ -472,16 +819,21 @@ export default function PedidoVendaEdit() {
         <div>
           <h1 style={layoutStyles.title}>Editar Pedido de Venda #{pedidoId}</h1>
           <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
-            {loading ? "Carregando..." : "Edite o cabeçalho e gerencie os itens."}
+            {loading
+              ? "Carregando..."
+              : `Status atual: ${pedidoStatus || "-"} · Edite o cabeçalho e gerencie os itens.`}
           </div>
         </div>
       </div>
 
-      {/* CABEÇALHO */}
       <div style={layoutStyles.card}>
         <div style={sectionTitleStyle}>
           <div style={sectionLabelStyle}>Cabeçalho do Pedido</div>
-          <div style={sectionHintStyle}>Atualize e salve</div>
+          <div style={sectionHintStyle}>
+            {pedidoStatus === "RASCUNHO"
+              ? "Atualize e salve"
+              : "Pedido fora de rascunho: cabeçalho bloqueado"}
+          </div>
         </div>
 
         <form onSubmit={handleSalvarCabecalho}>
@@ -496,7 +848,13 @@ export default function PedidoVendaEdit() {
                   <select
                     value={contratoId}
                     onChange={(e) => setContratoId(e.target.value)}
-                    style={{ ...filterStyles.select, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
+                    style={{
+                      ...filterStyles.select,
+                      height: 38,
+                      padding: "0 12px",
+                      boxSizing: "border-box",
+                      width: "100%",
+                    }}
                     disabled={disableHeader}
                   >
                     <option value="">Selecione...</option>
@@ -526,7 +884,13 @@ export default function PedidoVendaEdit() {
                     type="date"
                     value={data}
                     onChange={(e) => setData(e.target.value)}
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
+                    style={{
+                      ...filterStyles.input,
+                      height: 38,
+                      padding: "0 12px",
+                      boxSizing: "border-box",
+                      width: "100%",
+                    }}
                     disabled={disableHeader}
                   />
 
@@ -544,7 +908,14 @@ export default function PedidoVendaEdit() {
                     value={observacao}
                     onChange={(e) => setObservacao(e.target.value)}
                     placeholder="Opcional"
-                    style={{ ...filterStyles.input, height: 120, padding: "10px 12px", boxSizing: "border-box", width: "100%", resize: "vertical" }}
+                    style={{
+                      ...filterStyles.input,
+                      height: 120,
+                      padding: "10px 12px",
+                      boxSizing: "border-box",
+                      width: "100%",
+                      resize: "vertical",
+                    }}
                     disabled={disableHeader}
                   />
                 </div>
@@ -566,26 +937,32 @@ export default function PedidoVendaEdit() {
 
       <div style={{ height: 22 }} />
 
-      {/* ITENS */}
       <div style={layoutStyles.card}>
         <div style={sectionTitleStyle}>
           <div style={sectionLabelStyle}>Itens do Pedido</div>
           <div style={sectionHintStyle}>
-            Itens: {totais.totalItens} · Qtd: {formatQtyBR(totais.totalQtd)} · Total: R$ {formatMoneyBR(totais.totalValor)}
+            Itens: {totais.totalItens} · Qtd: {formatQtyBR(totais.totalQtd)} ·
+            Total pedido: R$ {formatMoneyBR(totais.totalValor)} ·
+            Total líquido: R$ {formatMoneyBR(totais.totalLiquido)}
           </div>
         </div>
 
         <div style={layoutStyles.cardCompact}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
             <div style={isSmall ? itemGridStyleMobile : itemGridStyle}>
-              {/* SELECT */}
               <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
                 <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Item do Contrato (Produto)</label>
 
                 <select
                   value={contratoItemId}
                   onChange={(e) => setContratoItemId(e.target.value)}
-                  style={{ ...filterStyles.select, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
+                  style={{
+                    ...filterStyles.select,
+                    height: 38,
+                    padding: "0 12px",
+                    boxSizing: "border-box",
+                    width: "100%",
+                  }}
                   disabled={disableItem || !contratoId}
                 >
                   <option value="">Selecione...</option>
@@ -599,18 +976,18 @@ export default function PedidoVendaEdit() {
                 <div style={helperLineStyle}>
                   {contratoItemSelecionado ? (
                     <>
-                      <span style={{ color: "#9ca3af" }}>Unidade: </span>
-                      {contratoItemSelecionado.unidade_contratada ?? "UN"}
-                      <span style={{ color: "#9ca3af", marginLeft: 10 }}>Fator: </span>
-                      {String(contratoItemSelecionado.fator_multiplicacao ?? 1)}
-                      <span style={{ color: "#9ca3af", marginLeft: 10 }}>Preço contrat.: </span>
-                      R$ {formatMoneyBR(precoContratoAtual)}
-                      {qtdMaxContratoItem ? (
-                        <>
-                          <span style={{ color: "#9ca3af", marginLeft: 10 }}>Saldo no pedido: </span>
-                          <b>{formatQtyBR(saldoDisponivelNoPedido)}</b>
-                        </>
-                      ) : null}
+                      <div>
+                        <span style={{ color: "#9ca3af" }}>Unidade: </span>
+                        <b>{contratoItemSelecionado.unidade_contratada ?? "UN"}</b>
+                        <span style={{ color: "#9ca3af", marginLeft: 10 }}>Fator: </span>
+                        <b>{String(contratoItemSelecionado.fator_multiplicacao ?? 1)}</b>
+                      </div>
+                      <div>
+                        <span style={{ color: "#9ca3af" }}>Saldo do contrato: </span>
+                        <b>{formatQtyBR(saldoContratoSelecionado)}</b>
+                        <span style={{ color: "#9ca3af", marginLeft: 10 }}>Preço contrat.: </span>
+                        <b>R$ {formatMoneyBR(precoContratoAtual)}</b>
+                      </div>
                     </>
                   ) : (
                     "\u00A0"
@@ -618,7 +995,6 @@ export default function PedidoVendaEdit() {
                 </div>
               </div>
 
-              {/* QTD */}
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Quantidade</label>
                 <input
@@ -633,20 +1009,21 @@ export default function PedidoVendaEdit() {
                     padding: "0 12px",
                     boxSizing: "border-box",
                     width: "100%",
-                    borderColor: qtdExcedeMax ? "#fecaca" : undefined,
+                    borderColor: qtdExcedeSaldoContrato ? "#fecaca" : undefined,
                   }}
                   disabled={disableItem}
                 />
                 <div style={helperLineStyle}>
-                  {qtdExcedeMax ? (
-                    <span style={{ color: "#b91c1c", fontWeight: 700 }}>Excede o máximo contratado (no pedido).</span>
+                  {qtdExcedeSaldoContrato ? (
+                    <span style={{ color: "#b91c1c", fontWeight: 700 }}>
+                      Excede o saldo do contrato.
+                    </span>
                   ) : (
                     "\u00A0"
                   )}
                 </div>
               </div>
 
-              {/* PREÇO */}
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Preço Unitário (Contrato)</label>
                 <input
@@ -663,10 +1040,9 @@ export default function PedidoVendaEdit() {
                   }}
                   disabled={disableItem}
                 />
-                <div style={{ height: 34 }} aria-hidden />
+                <div style={{ minHeight: 42 }} aria-hidden />
               </div>
 
-              {/* BOTÃO */}
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>&nbsp;</label>
                 <button
@@ -684,33 +1060,40 @@ export default function PedidoVendaEdit() {
                 >
                   {savingItem ? "Inserindo..." : "+ Inserir"}
                 </button>
-                <div style={{ height: 34 }} aria-hidden />
+                <div style={{ minHeight: 42 }} aria-hidden />
               </div>
             </div>
           </div>
         </div>
 
-        <div style={{ paddingTop: 12, fontSize: 13, color: "#64748b" }}>Exibindo {itens.length} item(ns)</div>
+        <div style={{ paddingTop: 12, fontSize: 13, color: "#64748b" }}>
+          Exibindo {itens.length} item(ns)
+        </div>
 
         <div style={{ overflowX: "auto", marginTop: 12 }}>
           <table style={{ ...tableStyles.table, tableLayout: "auto" }}>
             <thead>
               <tr>
                 <th style={{ ...tableStyles.th, width: 70 }}>ID</th>
-                <th style={{ ...tableStyles.th, width: "52%" }}>PRODUTO</th>
-                <th style={{ ...tableStyles.th, width: 80, textAlign: "center" }}>UNID.</th>
-                <th style={{ ...tableStyles.th, width: 150, textAlign: "right" }}>QTD</th>
-                <th style={{ ...tableStyles.th, width: 170, textAlign: "right" }}>PREÇO UNIT.</th>
-                <th style={{ ...tableStyles.th, width: 190, textAlign: "right" }}>SUBTOTAL</th>
-                <th style={{ ...tableStyles.th, width: 130, textAlign: "center" }}>APROVADO</th>
-                <th style={{ ...tableStyles.th, width: 160, textAlign: "center" }}>AÇÕES</th>
+                <th style={{ ...tableStyles.th, width: "28%" }}>PRODUTO</th>
+                <th style={{ ...tableStyles.th, width: 70, textAlign: "center" }}>UNID.</th>
+                <th style={{ ...tableStyles.th, width: 110, textAlign: "right" }}>QTD</th>
+                <th style={{ ...tableStyles.th, width: 110, textAlign: "right" }}>RESERV.</th>
+                <th style={{ ...tableStyles.th, width: 110, textAlign: "right" }}>EXPED.</th>
+                <th style={{ ...tableStyles.th, width: 110, textAlign: "right" }}>PEND.</th>
+                <th style={{ ...tableStyles.th, width: 110, textAlign: "right" }}>DEVOL.</th>
+                <th style={{ ...tableStyles.th, width: 110, textAlign: "right" }}>LÍQUIDO</th>
+                <th style={{ ...tableStyles.th, width: 150, textAlign: "right" }}>PREÇO</th>
+                <th style={{ ...tableStyles.th, width: 170, textAlign: "right" }}>SUBTOTAL</th>
+                <th style={{ ...tableStyles.th, width: 160, textAlign: "center" }}>STATUS ITEM</th>
+                <th style={{ ...tableStyles.th, width: 170, textAlign: "center" }}>AÇÕES</th>
               </tr>
             </thead>
 
             <tbody>
               {itens.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
+                  <td colSpan={11} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
                     Nenhum item inserido ainda.
                   </td>
                 </tr>
@@ -721,48 +1104,82 @@ export default function PedidoVendaEdit() {
                 const precoN = moneyFromApi(it.preco_unitario);
                 const subtotal = qtdN * precoN;
 
+                const qtdReservada = toNumberAny(it.qtd_reservada);
+                const qtdExpedida = toNumberAny(it.qtd_expedida);
+                const qtdCancelada = toNumberAny(it.qtd_cancelada);
+
+                const qtdDevolvida = toNumberAny(it.qtd_devolvida);
+                const qtdLiquida = Math.max(0, qtdExpedida - qtdDevolvida);
+
+                const saldoPendente =
+                  it.saldo_pendente ?? Math.max(0, qtdN - qtdCancelada - qtdExpedida);
+
+                const saldoReservado =
+                  it.saldo_reservado ?? Math.max(0, qtdReservada - qtdExpedida);
+
                 const option = contratoItensOptions.find((x) => x.id === it.contrato_item_id);
                 const unid = option?.unidade_contratada ?? "UN";
                 const nome = it.produto?.nome || option?.produtoNome || `Produto #${it.produto_id}`;
-
-                const aprovadoLabel = it.aprovado === true ? "SIM" : it.aprovado === false ? "NÃO" : "PENDENTE";
-                const aprovadoStyle =
-                  it.aprovado === true
-                    ? { background: "#dcfce7", color: "#166534" }
-                    : it.aprovado === false
-                    ? { background: "#fee2e2", color: "#991b1b" }
-                    : { background: "#fef9c3", color: "#854d0e" };
 
                 return (
                   <tr key={it.id} style={{ background: idx % 2 === 0 ? "#fff" : "#f9fafb" }}>
                     <td style={tableStyles.td}>{it.id}</td>
 
-                    <td style={{ ...tableStyles.td, whiteSpace: "normal", wordBreak: "break-word", lineHeight: 1.35 }} title={nome}>
+                    <td
+                      style={{ ...tableStyles.td, whiteSpace: "normal", wordBreak: "break-word", lineHeight: 1.35 }}
+                      title={nome}
+                    >
                       <div style={{ fontWeight: 700, color: "#0f172a" }}>{nome}</div>
-                      {it.motivo_bloqueio ? <div style={{ marginTop: 6, fontSize: 12, color: "#b91c1c" }}>{it.motivo_bloqueio}</div> : null}
+                      {it.motivo_bloqueio ? (
+                        <div style={{ marginTop: 6, fontSize: 12, color: "#b91c1c" }}>
+                          {it.motivo_bloqueio}
+                        </div>
+                      ) : null}
                     </td>
 
                     <td style={{ ...tableStyles.td, textAlign: "center" }}>{unid}</td>
 
-                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>{formatQtyBR(qtdN)}</td>
+                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>
+                      {formatQtyBR(qtdN)}
+                    </td>
 
-                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>R$ {formatMoneyBR(precoN)}</td>
+                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>
+                      {formatQtyBR(qtdReservada)}
+                    </td>
 
-                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8, fontWeight: 800 }}>R$ {formatMoneyBR(subtotal)}</td>
+                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>
+                      {formatQtyBR(qtdExpedida)}
+                    </td>
+
+                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8, fontWeight: 700 }}>
+                      {formatQtyBR(saldoPendente)}
+                    </td>
+
+                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>
+                      {formatQtyBR(qtdDevolvida)}
+                    </td>
+
+                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8, fontWeight: 700 }}>
+                      {formatQtyBR(qtdLiquida)}
+                    </td>
+
+                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>
+                      R$ {formatMoneyBR(precoN)}
+                    </td>
+
+                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8, fontWeight: 800 }}>
+                      R$ {formatMoneyBR(subtotal)}
+                    </td>
 
                     <td style={{ ...tableStyles.td, textAlign: "center" }}>
-                      <span
-                        style={{
-                          padding: "4px 10px",
-                          borderRadius: 6,
-                          fontSize: 12,
-                          fontWeight: 800,
-                          display: "inline-block",
-                          ...aprovadoStyle,
-                        }}
-                      >
-                        {aprovadoLabel}
-                      </span>
+                      {(() => {
+                        const statusVisual = getStatusItemVisual(it);
+                        return (
+                          <span style={statusItemVisualStyle(statusVisual)}>
+                            {statusVisual}
+                          </span>
+                        );
+                      })()}
                     </td>
 
                     <td style={{ ...tableStyles.td, textAlign: "center" }}>
@@ -786,10 +1203,39 @@ export default function PedidoVendaEdit() {
                         </button>
 
                         <button
+                          style={{ ...buttonStyles.icon, opacity: saldoReservado > 0 ? 1 : 0.35 }}
+                          onClick={() => openBaixaModal(it)}
+                          disabled={saldoReservado <= 0 || it.aprovado !== true || !canBaixarItens}
+                          title="Baixar item"
+                        >
+                          <FiSend size={18} color="#075985" />
+                        </button>
+
+                        <button
+                          style={{
+                            ...buttonStyles.icon,
+                            opacity:
+                              toNumberAny(it.qtd_expedida) - toNumberAny(it.qtd_devolvida) > 0 ? 1 : 0.35,
+                          }}
+                          onClick={() => openDevolucaoModal(it)}
+                          disabled={
+                            toNumberAny(it.qtd_expedida) - toNumberAny(it.qtd_devolvida) <= 0 ||
+                            !canDevolverItens
+                          }
+                          title="Devolver item"
+                        >
+                          <FiCornerUpLeft size={18} color="#854d0e" />
+                        </button>
+
+                        <button
                           style={{ ...buttonStyles.icon, opacity: removingItemId === it.id ? 0.6 : 1 }}
                           onClick={() => handleRemoveItem(it.id)}
-                          disabled={removingItemId === it.id}
-                          title="Remover item"
+                          disabled={removingItemId === it.id || pedidoStatus !== "RASCUNHO"}
+                          title={
+                            pedidoStatus === "RASCUNHO"
+                              ? "Remover item"
+                              : "Só é possível remover em RASCUNHO"
+                          }
                         >
                           <FiTrash2 size={18} color="#dc2626" />
                         </button>
@@ -801,7 +1247,7 @@ export default function PedidoVendaEdit() {
 
               {loading && (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
+                  <td colSpan={11} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
                     Carregando...
                   </td>
                 </tr>
@@ -817,7 +1263,6 @@ export default function PedidoVendaEdit() {
         </div>
       </div>
 
-      {/* MODAL REPROVAR */}
       {motivoModalOpen && itemParaReprovar && (
         <div
           style={{
@@ -882,6 +1327,368 @@ export default function PedidoVendaEdit() {
                 disabled={togglingItemId === itemParaReprovar.id}
               >
                 {togglingItemId === itemParaReprovar.id ? "Salvando..." : "Reprovar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {baixaModalOpen && itemBaixa && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15,23,42,.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 60,
+          }}
+          onClick={closeBaixaModal}
+        >
+          <div
+            style={{
+              width: "min(560px, 100%)",
+              background: "#fff",
+              borderRadius: 14,
+              padding: 16,
+              boxShadow: "0 20px 50px rgba(0,0,0,.18)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a" }}>
+              Baixar item #{itemBaixa.id}
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 13, color: "#64748b" }}>
+              Informe a quantidade para baixa
+              {itemBaixa.produto?.controla_lote ? " e selecione o lote." : "."}
+            </div>
+
+            <div style={{ marginTop: 12, fontSize: 13, color: "#334155", lineHeight: 1.6 }}>
+              <div>
+                <b>Produto:</b> {itemBaixa.produto?.nome || `Produto #${itemBaixa.produto_id}`}
+              </div>
+              <div>
+                <b>Qtd pedida:</b> {formatQtyBR(toNumberAny(itemBaixa.qtd))}
+              </div>
+              <div>
+                <b>Qtd reservada:</b> {formatQtyBR(toNumberAny(itemBaixa.qtd_reservada))}
+              </div>
+              <div>
+                <b>Qtd expedida:</b> {formatQtyBR(toNumberAny(itemBaixa.qtd_expedida))}
+              </div>
+              <div>
+                <b>Saldo reservado:</b>{" "}
+                {formatQtyBR(
+                  itemBaixa.saldo_reservado ??
+                  Math.max(
+                    0,
+                    toNumberAny(itemBaixa.qtd_reservada) - toNumberAny(itemBaixa.qtd_expedida)
+                  )
+                )}
+              </div>
+            </div>
+
+            {itemBaixa.produto?.controla_lote && (
+              <div style={{ marginTop: 16 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
+                  Lote disponível
+                </label>
+
+                <select
+                  value={estoqueLoteId}
+                  onChange={(e) => setEstoqueLoteId(e.target.value)}
+                  style={{
+                    ...filterStyles.select,
+                    width: "100%",
+                    height: 40,
+                    marginTop: 6,
+                    padding: "0 12px",
+                    boxSizing: "border-box",
+                  }}
+                  disabled={loadingLotes}
+                >
+                  <option value="">
+                    {loadingLotes ? "Carregando lotes..." : "Selecione o lote"}
+                  </option>
+
+                  {lotesDisponiveis.map((l) => (
+                    <option key={l.id} value={String(l.id)}>
+                      {l.lote}
+                      {l.validade ? ` | Val: ${l.validade}` : ""}
+                      {` | Qtd: ${formatQtyBR(toNumberAny(l.quantidade))}`}
+                    </option>
+                  ))}
+                </select>
+
+                {estoqueLoteId && (
+                  <div style={{ marginTop: 10 }}>
+                    {(() => {
+                      const loteSelecionado = lotesDisponiveis.find(
+                        (l) => String(l.id) === String(estoqueLoteId)
+                      );
+
+                      if (!loteSelecionado) return null;
+
+                      const situacao = situacaoValidadeLabel(loteSelecionado.situacao_validade);
+
+                      return (
+                        <div
+                          style={{
+                            border: "1px solid #e5e7eb",
+                            borderRadius: 10,
+                            padding: 12,
+                            background: "#f8fafc",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 6,
+                          }}
+                        >
+                          <div>
+                            <b>Lote:</b> {loteSelecionado.lote}
+                          </div>
+                          <div>
+                            <b>Validade:</b> {loteSelecionado.validade || "-"}
+                          </div>
+                          <div>
+                            <b>Quantidade disponível:</b>{" "}
+                            {formatQtyBR(toNumberAny(loteSelecionado.quantidade))}
+                          </div>
+                          <div>
+                            <span
+                              style={{
+                                display: "inline-block",
+                                padding: "4px 8px",
+                                borderRadius: 999,
+                                fontSize: 12,
+                                fontWeight: 700,
+                                color: situacao.color,
+                                background: situacao.bg,
+                              }}
+                            >
+                              {situacao.label}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ marginTop: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
+                Quantidade para baixa
+              </label>
+              <input
+                value={qtdBaixa}
+                onChange={(e) => setQtdBaixa(normalizeDecimalString(e.target.value))}
+                placeholder="0,000"
+                inputMode="decimal"
+                style={{
+                  ...filterStyles.input,
+                  width: "100%",
+                  height: 40,
+                  marginTop: 6,
+                  padding: "0 12px",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 14 }}>
+              <button style={buttonStyles.link} onClick={closeBaixaModal}>
+                Cancelar
+              </button>
+
+              <button
+                style={buttonStyles.primary}
+                onClick={handleBaixarItem}
+                disabled={baixandoItemId === itemBaixa.id || loadingLotes}
+              >
+                {baixandoItemId === itemBaixa.id ? "Baixando..." : "Confirmar baixa"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {devolucaoModalOpen && itemDevolucao && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15,23,42,.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 70,
+          }}
+          onClick={closeDevolucaoModal}
+        >
+          <div
+            style={{
+              width: "min(560px, 100%)",
+              background: "#fff",
+              borderRadius: 14,
+              padding: 16,
+              boxShadow: "0 20px 50px rgba(0,0,0,.18)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a" }}>
+              Devolver item #{itemDevolucao.id}
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 13, color: "#64748b" }}>
+              Informe a quantidade para devolução
+              {itemDevolucao.produto?.controla_lote ? " e selecione o lote." : "."}
+            </div>
+
+            <div style={{ marginTop: 12, fontSize: 13, color: "#334155", lineHeight: 1.6 }}>
+              <div>
+                <b>Produto:</b> {itemDevolucao.produto?.nome || `Produto #${itemDevolucao.produto_id}`}
+              </div>
+              <div>
+                <b>Qtd expedida:</b> {formatQtyBR(toNumberAny(itemDevolucao.qtd_expedida))}
+              </div>
+              <div>
+                <b>Qtd devolvida:</b> {formatQtyBR(toNumberAny(itemDevolucao.qtd_devolvida))}
+              </div>
+              <div>
+                <b>Saldo devolvível:</b>{" "}
+                {formatQtyBR(
+                  Math.max(
+                    0,
+                    toNumberAny(itemDevolucao.qtd_expedida) - toNumberAny(itemDevolucao.qtd_devolvida)
+                  )
+                )}
+              </div>
+            </div>
+
+            {itemDevolucao.produto?.controla_lote && (
+              <div style={{ marginTop: 16 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
+                  Lote da devolução
+                </label>
+
+                <select
+                  value={estoqueLoteIdDevolucao}
+                  onChange={(e) => setEstoqueLoteIdDevolucao(e.target.value)}
+                  style={{
+                    ...filterStyles.select,
+                    width: "100%",
+                    height: 40,
+                    marginTop: 6,
+                    padding: "0 12px",
+                    boxSizing: "border-box",
+                  }}
+                  disabled={loadingLotesDevolucao}
+                >
+                  <option value="">
+                    {loadingLotesDevolucao ? "Carregando lotes..." : "Selecione o lote"}
+                  </option>
+
+                  {lotesDevolucao.map((l) => (
+                    <option key={l.id} value={String(l.id)}>
+                      {l.lote}
+                      {l.validade ? ` | Val: ${l.validade}` : ""}
+                      {` | Qtd: ${formatQtyBR(toNumberAny(l.quantidade))}`}
+                    </option>
+                  ))}
+                </select>
+
+                {estoqueLoteIdDevolucao && (
+                  <div style={{ marginTop: 10 }}>
+                    {(() => {
+                      const loteSelecionado = lotesDevolucao.find(
+                        (l) => String(l.id) === String(estoqueLoteIdDevolucao)
+                      );
+
+                      if (!loteSelecionado) return null;
+
+                      const situacao = situacaoValidadeLabel(loteSelecionado.situacao_validade);
+
+                      return (
+                        <div
+                          style={{
+                            border: "1px solid #e5e7eb",
+                            borderRadius: 10,
+                            padding: 12,
+                            background: "#f8fafc",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 6,
+                          }}
+                        >
+                          <div>
+                            <b>Lote:</b> {loteSelecionado.lote}
+                          </div>
+                          <div>
+                            <b>Validade:</b> {loteSelecionado.validade || "-"}
+                          </div>
+                          <div>
+                            <b>Quantidade atual no lote:</b>{" "}
+                            {formatQtyBR(toNumberAny(loteSelecionado.quantidade))}
+                          </div>
+                          <div>
+                            <span
+                              style={{
+                                display: "inline-block",
+                                padding: "4px 8px",
+                                borderRadius: 999,
+                                fontSize: 12,
+                                fontWeight: 700,
+                                color: situacao.color,
+                                background: situacao.bg,
+                              }}
+                            >
+                              {situacao.label}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ marginTop: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
+                Quantidade para devolução
+              </label>
+              <input
+                value={qtdDevolucao}
+                onChange={(e) => setQtdDevolucao(normalizeDecimalString(e.target.value))}
+                placeholder="0,000"
+                inputMode="decimal"
+                style={{
+                  ...filterStyles.input,
+                  width: "100%",
+                  height: 40,
+                  marginTop: 6,
+                  padding: "0 12px",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 14 }}>
+              <button style={buttonStyles.link} onClick={closeDevolucaoModal}>
+                Cancelar
+              </button>
+
+              <button
+                style={buttonStyles.primary}
+                onClick={handleDevolverItem}
+                disabled={devolvendoItemId === itemDevolucao.id || loadingLotesDevolucao}
+              >
+                {devolvendoItemId === itemDevolucao.id ? "Devolvendo..." : "Confirmar devolução"}
               </button>
             </div>
           </div>

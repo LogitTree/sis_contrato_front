@@ -93,6 +93,9 @@ export default function ProdutoEdit() {
   const [loadingGrupos, setLoadingGrupos] = useState(false);
   const [loadingSubgrupos, setLoadingSubgrupos] = useState(false);
 
+  const [controlaLote, setControlaLote] = useState(false);
+  const [controlaValidade, setControlaValidade] = useState(false);
+
   const [form, setForm] = useState<ProdutoForm>({
     nome: "",
     descricao: "",
@@ -165,6 +168,25 @@ export default function ProdutoEdit() {
     color: "#64748b",
   };
 
+  const checkboxGroup: React.CSSProperties = {
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+    minHeight: 30,
+    justifyContent: "center",
+    paddingTop: 0,
+  };
+
+  const checkboxLabel: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    fontSize: 12,
+    color: "#374151",
+    cursor: "pointer",
+    userSelect: "none",
+  };
+
   /* =========================
      Load Grupos
   ========================= */
@@ -205,7 +227,8 @@ export default function ProdutoEdit() {
           cod_barra: data.cod_barra ?? "",
           ativo: Boolean(data.ativo),
         });
-
+        setControlaLote(!!data.controla_lote);
+        setControlaValidade(!!data.controla_validade);
         // carrega subgrupos do grupo atual (se houver)
         if (grupoId) {
           setLoadingSubgrupos(true);
@@ -290,9 +313,15 @@ export default function ProdutoEdit() {
         cod_barra: form.cod_barra || null,
         estoque_min: form.estoque_min ? Number(form.estoque_min) : 0,
 
+        controla_lote: controlaLote,
+        controla_validade: controlaValidade,
+
         ativo: form.ativo,
       };
-
+      console.log({
+        controla_lote: controlaLote,
+        controla_validade: controlaValidade,
+      });
       await api.put(`/produtos/${id}`, payload);
 
       toast.success("Produto atualizado com sucesso");
@@ -542,6 +571,44 @@ export default function ProdutoEdit() {
                   style={formStyles.input}
                   placeholder="0"
                 />
+              </div>
+
+              <div style={formStyles.field}>
+                <label style={labelSmall}>Controle de estoque</label>
+
+                <div style={checkboxGroup}>
+                  <label style={checkboxLabel}>
+                    <input
+                      type="checkbox"
+                      checked={controlaLote}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+
+                        if (!checked && controlaValidade) return;
+
+                        setControlaLote(checked);
+                      }}
+                    />
+                    Controla lote
+                  </label>
+
+                  <label style={checkboxLabel}>
+                    <input
+                      type="checkbox"
+                      checked={controlaValidade}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+
+                        setControlaValidade(checked);
+
+                        if (checked) {
+                          setControlaLote(true);
+                        }
+                      }}
+                    />
+                    Controla validade
+                  </label>
+                </div>
               </div>
 
             </div>
