@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { BrowserMultiFormatReader } from "@zxing/browser";
+
 import {
   FiArrowLeft,
   FiCamera,
@@ -10,6 +10,7 @@ import {
   FiSearch,
 } from "react-icons/fi";
 import { toast } from "react-toastify";
+import { Html5Qrcode } from "html5-qrcode";
 import api from "../../api/api";
 
 type Produto = {
@@ -19,6 +20,14 @@ type Produto = {
   controla_lote?: boolean;
   controla_validade?: boolean;
   custo_medio?: string | number | null;
+};
+
+type ExtendedMediaTrackCapabilities = MediaTrackCapabilities & {
+  focusMode?: string[];
+  zoom?: {
+    min?: number;
+    max?: number;
+  } | number;
 };
 
 function toNumber(v: unknown, def = 0) {
@@ -39,9 +48,8 @@ export default function InventarioScanner() {
 
   const inventarioInicial = searchParams.get("inventarioId") || "";
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const scannerRef = useRef<BrowserMultiFormatReader | null>(null);
-  const controlsRef = useRef<{ stop: () => void } | null>(null);
+  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  const scannerContainerId = "inventario-scanner-reader";
   const lastReadRef = useRef("");
   const processingRef = useRef(false);
   const mountedRef = useRef(true);
@@ -97,6 +105,12 @@ export default function InventarioScanner() {
       pararScanner();
     };
   }, []);
+
+  useEffect(() => {
+    if (inventarioConfirmado) {
+      iniciarScanner();
+    }
+  }, [inventarioConfirmado]);
 
   useEffect(() => {
     function handleVisibilityChange() {
@@ -157,45 +171,28 @@ export default function InventarioScanner() {
     }
   }
 
-  async function aplicarMelhoriasNoTrack() {
-    try {
-      const stream = videoRef.current?.srcObject as MediaStream | null;
-      const track = stream?.getVideoTracks?.()[0];
+  function escolherMelhorCameraLabel(cameras: Array<{ id: string; label: string }>) {
+    if (!cameras.length) return null;
 
-      if (!track) return;
+    const ordenadas = [...cameras].sort((a, b) => {
+      const la = String(a.label || "").toLowerCase();
+      const lb = String(b.label || "").toLowerCase();
 
-      const capabilities = track.getCapabilities?.() as ExtendedMediaTrackCapabilities | undefined;
-      const advanced: Record<string, unknown>[] = [];
+      const score = (label: string) => {
+        let s = 0;
+        if (label.includes("back")) s += 5;
+        if (label.includes("rear")) s += 5;
+        if (label.includes("traseira")) s += 5;
+        if (label.includes("environment")) s += 5;
+        if (label.includes("wide")) s += 2;
+        if (label.includes("ultra")) s -= 1;
+        return s;
+      };
 
-      if (
-        capabilities?.focusMode &&
-        Array.isArray(capabilities.focusMode) &&
-        capabilities.focusMode.includes("continuous")
-      ) {
-        advanced.push({ focusMode: "continuous" });
-      }
+      return score(lb) - score(la);
+    });
 
-      if (
-        capabilities?.zoom &&
-        typeof capabilities.zoom === "object" &&
-        "min" in capabilities.zoom &&
-        "max" in capabilities.zoom
-      ) {
-        const min = Number(capabilities.zoom.min ?? 1);
-        const max = Number(capabilities.zoom.max ?? 1);
-        const idealZoom = Math.min(Math.max(1, min), max);
-
-        advanced.push({ zoom: idealZoom });
-      }
-
-      if (advanced.length > 0) {
-        await track.applyConstraints({
-          advanced: advanced as MediaTrackConstraintSet[],
-        });
-      }
-    } catch (err) {
-      console.log("Melhorias de foco/zoom não suportadas:", err);
-    }
+    return ordenadas[0]?.id || null;
   }
 
   async function iniciarScanner() {
@@ -209,29 +206,36 @@ export default function InventarioScanner() {
       setLoadingCamera(true);
       setCameraReady(false);
 
-      const scanner = new BrowserMultiFormatReader();
-      scannerRef.current = scanner;
+      const cameras = await Html5Qrcode.getCameras();
 
-      const devices = await BrowserMultiFormatReader.listVideoInputDevices();
-
-      if (!devices.length) {
+      if (!cameras || cameras.length === 0) {
         toast.error("Nenhuma câmera encontrada");
         return;
       }
 
-      const deviceId = escolherMelhorCamera(devices);
+      const cameraId = escolherMelhorCameraLabel(cameras);
 
-      const controls = await scanner.decodeFromVideoDevice(
-        deviceId || undefined,
-        videoRef.current!,
-        async (result) => {
+      const html5QrCode = new Html5Qrcode(scannerContainerId, {
+        verbose: false,
+      });
+
+      html5QrCodeRef.current = html5QrCode;
+
+      await html5QrCode.start(
+        cameraId
+          ? { deviceId: { exact: cameraId } }
+          : { facingMode: "environment" },
+        {
+          fps: 12,
+          qrbox: { width: 280, height: 120 },
+          aspectRatio: 1.777778,
+          disableFlip: false,
+        },
+        async (decodedText) => {
           if (!mountedRef.current) return;
           if (processingRef.current) return;
-          if (!result) return;
 
-          const codigo = String(result.getText() || "")
-            .replace(/\s+/g, "")
-            .trim();
+          const codigo = String(decodedText || "").replace(/\s+/g, "").trim();
 
           if (!codigo) return;
           if (lastReadRef.current === codigo) return;
@@ -246,17 +250,14 @@ export default function InventarioScanner() {
           await buscarProdutoPorCodigo(codigo);
 
           processingRef.current = false;
+        },
+        () => {
+          // erros de frame são normais, não fazer nada
         }
       );
 
-      controlsRef.current = controls;
-
       if (mountedRef.current) {
         setCameraReady(true);
-
-        setTimeout(() => {
-          aplicarMelhoriasNoTrack();
-        }, 400);
       }
     } catch (err: any) {
       console.error("Erro ao iniciar câmera:", err);
@@ -281,27 +282,18 @@ export default function InventarioScanner() {
 
   async function pararScanner() {
     try {
-      controlsRef.current?.stop();
-    } catch (err) {
-      console.error("Erro ao parar controls:", err);
-    } finally {
-      controlsRef.current = null;
-    }
+      if (html5QrCodeRef.current) {
+        const scannerState = html5QrCodeRef.current.getState?.();
 
-    try {
-      if (videoRef.current?.srcObject) {
-        const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-        tracks.forEach((track) => {
-          try {
-            track.stop();
-          } catch (err) {
-            console.error(err);
-          }
-        });
-        videoRef.current.srcObject = null;
+        if (scannerState === 2 || scannerState === 1) {
+          await html5QrCodeRef.current.stop();
+        }
+
+        await html5QrCodeRef.current.clear();
+        html5QrCodeRef.current = null;
       }
     } catch (err) {
-      console.error("Erro ao limpar stream:", err);
+      console.error("Erro ao parar scanner:", err);
     }
 
     if (mountedRef.current) {
@@ -558,7 +550,11 @@ export default function InventarioScanner() {
             </div>
 
             <div style={styles.helpBox}>
-              Digite o ID do inventário que receberá os itens lidos pela câmera.
+              Aponte a câmera para o código de barras.
+              <br />
+              Mantenha o código dentro da faixa verde.
+              <br />
+              Se a leitura falhar, afaste um pouco a câmera e tente novamente.
             </div>
 
             <div style={styles.fieldWrap}>
@@ -627,21 +623,18 @@ export default function InventarioScanner() {
               </div>
 
               <div style={styles.cameraWrapper}>
-                <video
-                  ref={videoRef}
-                  muted
-                  playsInline
-                  autoPlay
+                <div
+                  id={scannerContainerId}
                   style={{
-                    ...styles.video,
-                    display: cameraReady ? "block" : "none",
+                    width: "100%",
+                    minHeight: 360,
+                    display: cameraReady || loadingCamera ? "block" : "none",
                   }}
                 />
-                {cameraReady && <div style={styles.scanFrame} />}
 
-                {!cameraReady && (
+                {!cameraReady && !loadingCamera && (
                   <div style={styles.cameraPausedBox}>
-                    {loadingCamera ? "Preparando câmera..." : "Câmera desligada"}
+                    Câmera desligada
                   </div>
                 )}
               </div>
@@ -1023,10 +1016,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   scanFrame: {
     position: "absolute",
-    top: "35%",
-    left: "5%",
-    width: "90%",
-    height: "18%",
+    top: "36%",
+    left: "6%",
+    width: "88%",
+    height: "16%",
     border: "3px solid #22c55e",
     borderRadius: 10,
     boxShadow: "0 0 0 9999px rgba(0,0,0,0.25)",
@@ -1045,7 +1038,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: "100%",
     display: "block",
     objectFit: "cover",
-    minHeight: 360,
+    minHeight: 420,
   },
   productCard: {
     background: "#f8fafc",
@@ -1230,4 +1223,5 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     color: "#475569",
   },
+
 };
