@@ -416,7 +416,7 @@ export default function InventarioScanner() {
         payload.validade = validade;
       }
 
-      await api.post(`/inventario/${inventarioId}/itens`, payload);
+      const { data } = await api.post(`/inventario/${inventarioId}/itens`, payload);
 
       registrarHistorico({
         produto_id: produto.id,
@@ -432,7 +432,11 @@ export default function InventarioScanner() {
         quantidade: toNumber(quantidade),
       });
 
-      toast.success("Item adicionado ao inventário");
+      if (data?.modo === "somado") {
+        toast.success("Quantidade somada ao item já existente");
+      } else {
+        toast.success("Item adicionado ao inventário");
+      }
 
       setCodigoManual("");
       await limparLeitura();
