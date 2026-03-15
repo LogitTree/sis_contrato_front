@@ -79,14 +79,6 @@ export default function InventarioScanner() {
     dataHora: string;
   };
 
-  type ExtendedMediaTrackCapabilities = MediaTrackCapabilities & {
-    focusMode?: string[];
-    zoom?: {
-      min?: number;
-      max?: number;
-    } | number;
-  };
-
   const [historicoItens, setHistoricoItens] = useState<HistoricoLeitura[]>([]);
 
   useEffect(() => {
