@@ -79,6 +79,14 @@ export default function InventarioScanner() {
     dataHora: string;
   };
 
+  type ExtendedMediaTrackCapabilities = MediaTrackCapabilities & {
+    focusMode?: string[];
+    zoom?: {
+      min?: number;
+      max?: number;
+    } | number;
+  };
+
   const [historicoItens, setHistoricoItens] = useState<HistoricoLeitura[]>([]);
 
   useEffect(() => {
@@ -110,6 +118,12 @@ export default function InventarioScanner() {
     };
   }, []);
 
+  useEffect(() => {
+    if (inventarioConfirmado) {
+      iniciarScanner();
+    }
+  }, [inventarioConfirmado]);
+
   function escolherMelhorCamera(devices: MediaDeviceInfo[]) {
     if (!devices.length) return null;
 
@@ -140,6 +154,47 @@ export default function InventarioScanner() {
       }
     } catch (err) {
       console.error(err);
+    }
+  }
+
+  async function aplicarMelhoriasNoTrack() {
+    try {
+      const stream = videoRef.current?.srcObject as MediaStream | null;
+      const track = stream?.getVideoTracks?.()[0];
+
+      if (!track) return;
+
+      const capabilities = track.getCapabilities?.() as ExtendedMediaTrackCapabilities | undefined;
+      const advanced: Record<string, unknown>[] = [];
+
+      if (
+        capabilities?.focusMode &&
+        Array.isArray(capabilities.focusMode) &&
+        capabilities.focusMode.includes("continuous")
+      ) {
+        advanced.push({ focusMode: "continuous" });
+      }
+
+      if (
+        capabilities?.zoom &&
+        typeof capabilities.zoom === "object" &&
+        "min" in capabilities.zoom &&
+        "max" in capabilities.zoom
+      ) {
+        const min = Number(capabilities.zoom.min ?? 1);
+        const max = Number(capabilities.zoom.max ?? 1);
+        const idealZoom = Math.min(Math.max(1, min), max);
+
+        advanced.push({ zoom: idealZoom });
+      }
+
+      if (advanced.length > 0) {
+        await track.applyConstraints({
+          advanced: advanced as MediaTrackConstraintSet[],
+        });
+      }
+    } catch (err) {
+      console.log("Melhorias de foco/zoom não suportadas:", err);
     }
   }
 
@@ -198,6 +253,10 @@ export default function InventarioScanner() {
 
       if (mountedRef.current) {
         setCameraReady(true);
+
+        setTimeout(() => {
+          aplicarMelhoriasNoTrack();
+        }, 400);
       }
     } catch (err: any) {
       console.error("Erro ao iniciar câmera:", err);
@@ -327,9 +386,6 @@ export default function InventarioScanner() {
 
     setInventarioConfirmado(true);
     setSearchParams({ inventarioId: id });
-    setTimeout(() => {
-      iniciarScanner();
-    }, 50);
   }
 
   async function limparLeitura() {
@@ -967,13 +1023,13 @@ const styles: Record<string, React.CSSProperties> = {
   },
   scanFrame: {
     position: "absolute",
-    top: "34%",
-    left: "8%",
-    width: "84%",
-    height: "16%",
-    border: "3px solid rgba(34,197,94,0.95)",
-    borderRadius: 12,
-    boxShadow: "0 0 0 9999px rgba(0,0,0,0.20)",
+    top: "35%",
+    left: "5%",
+    width: "90%",
+    height: "18%",
+    border: "3px solid #22c55e",
+    borderRadius: 10,
+    boxShadow: "0 0 0 9999px rgba(0,0,0,0.25)",
     pointerEvents: "none",
   },
   cameraWrapper: {
@@ -1128,5 +1184,50 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 14,
     fontWeight: 700,
     cursor: "pointer",
+  },
+
+  historyList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+
+  historyItem: {
+    border: "1px solid #e5e7eb",
+    borderRadius: 12,
+    padding: 12,
+    background: "#fff",
+  },
+
+  historyItemHighlight: {
+    border: "1px solid #93c5fd",
+    background: "#eff6ff",
+  },
+
+  historyTopRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 6,
+  },
+
+  historyName: {
+    fontSize: 14,
+    color: "#0f172a",
+  },
+
+  historyTime: {
+    fontSize: 12,
+    color: "#64748b",
+    fontWeight: 600,
+  },
+
+  historyMeta: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    fontSize: 12,
+    color: "#475569",
   },
 };
