@@ -22,14 +22,6 @@ type Produto = {
   custo_medio?: string | number | null;
 };
 
-type ExtendedMediaTrackCapabilities = MediaTrackCapabilities & {
-  focusMode?: string[];
-  zoom?: {
-    min?: number;
-    max?: number;
-  } | number;
-};
-
 function toNumber(v: unknown, def = 0) {
   const n = Number(v);
   return Number.isFinite(n) ? n : def;
@@ -137,29 +129,6 @@ export default function InventarioScanner() {
       iniciarScanner();
     }
   }, [inventarioConfirmado]);
-
-  function escolherMelhorCamera(devices: MediaDeviceInfo[]) {
-    if (!devices.length) return null;
-
-    const ordenadas = [...devices].sort((a, b) => {
-      const la = String(a.label || "").toLowerCase();
-      const lb = String(b.label || "").toLowerCase();
-
-      const score = (label: string) => {
-        let s = 0;
-        if (label.includes("back")) s += 5;
-        if (label.includes("rear")) s += 5;
-        if (label.includes("traseira")) s += 5;
-        if (label.includes("wide")) s += 2;
-        if (label.includes("ultra")) s -= 1;
-        return s;
-      };
-
-      return score(lb) - score(la);
-    });
-
-    return ordenadas[0]?.deviceId || null;
-  }
 
   function vibrarLeitura() {
     try {
