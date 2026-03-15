@@ -113,19 +113,24 @@ export default function InventarioScanner() {
   function escolherMelhorCamera(devices: MediaDeviceInfo[]) {
     if (!devices.length) return null;
 
-    const traseira =
-      devices.find((d) =>
-        String(d.label || "").toLowerCase().includes("back")
-      ) ||
-      devices.find((d) =>
-        String(d.label || "").toLowerCase().includes("rear")
-      ) ||
-      devices.find((d) =>
-        String(d.label || "").toLowerCase().includes("traseira")
-      ) ||
-      devices[devices.length - 1];
+    const ordenadas = [...devices].sort((a, b) => {
+      const la = String(a.label || "").toLowerCase();
+      const lb = String(b.label || "").toLowerCase();
 
-    return traseira?.deviceId || null;
+      const score = (label: string) => {
+        let s = 0;
+        if (label.includes("back")) s += 5;
+        if (label.includes("rear")) s += 5;
+        if (label.includes("traseira")) s += 5;
+        if (label.includes("wide")) s += 2;
+        if (label.includes("ultra")) s -= 1;
+        return s;
+      };
+
+      return score(lb) - score(la);
+    });
+
+    return ordenadas[0]?.deviceId || null;
   }
 
   function vibrarLeitura() {
@@ -956,14 +961,15 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 14,
     overflow: "hidden",
     background: "#000",
-    minHeight: 280,
+    minHeight: 360,
   },
+
   video: {
     width: "100%",
     height: "100%",
     display: "block",
     objectFit: "cover",
-    minHeight: 280,
+    minHeight: 360,
   },
   cameraPausedBox: {
     minHeight: 280,
@@ -975,17 +981,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     background: "#0f172a",
   },
-  scanFrame: {
-    position: "absolute",
-    top: "18%",
-    left: "10%",
-    width: "80%",
-    height: "32%",
-    border: "3px solid rgba(34,197,94,0.95)",
-    borderRadius: 12,
-    boxShadow: "0 0 0 9999px rgba(0,0,0,0.20)",
-    pointerEvents: "none",
-  },
+scanFrame: {
+  position: "absolute",
+  top: "30%",
+  left: "8%",
+  width: "84%",
+  height: "18%",
+  border: "3px solid rgba(34,197,94,0.95)",
+  borderRadius: 12,
+  boxShadow: "0 0 0 9999px rgba(0,0,0,0.20)",
+  pointerEvents: "none",
+},
   productCard: {
     background: "#f8fafc",
     border: "1px solid #e2e8f0",
