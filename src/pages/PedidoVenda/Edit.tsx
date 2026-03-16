@@ -8,7 +8,7 @@ import { buttonStyles } from "../../styles/buttons";
 import { tableStyles } from "../../styles/table";
 import { filterStyles } from "../../styles/filters";
 
-import { FiTrash2, FiCheckCircle, FiXCircle, FiSend, FiCornerUpLeft } from "react-icons/fi";
+import { FiTrash2, FiSend, FiCornerUpLeft } from "react-icons/fi";
 
 type ContratoOption = {
   id: number;
@@ -261,11 +261,6 @@ export default function PedidoVendaEdit() {
   const [loadingLotesDevolucao, setLoadingLotesDevolucao] = useState(false);
   const [estoqueLoteIdDevolucao, setEstoqueLoteIdDevolucao] = useState("");
 
-  function openReprovarModal(item: PedidoItem) {
-    setItemParaReprovar(item);
-    setMotivoTexto(item.motivo_bloqueio || "");
-    setMotivoModalOpen(true);
-  }
 
   function closeReprovarModal() {
     setMotivoModalOpen(false);
@@ -377,22 +372,6 @@ export default function PedidoVendaEdit() {
       toast.error(err?.response?.data?.error || "Erro ao devolver item");
     } finally {
       setDevolvendoItemId(null);
-    }
-  }
-
-  async function handleAprovarItem(itemId: number) {
-    if (!pedidoId) return;
-
-    setTogglingItemId(itemId);
-    try {
-      await api.post(`/pedidosvenda/${pedidoId}/itens/${itemId}/aprovar`);
-      toast.success("Item aprovado");
-      await loadPedidoAndFill();
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.response?.data?.error || "Erro ao aprovar item");
-    } finally {
-      setTogglingItemId(null);
     }
   }
 

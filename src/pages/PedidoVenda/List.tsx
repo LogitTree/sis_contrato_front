@@ -3,7 +3,7 @@ import api from "../../api/api";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 
-import type { PedidoVenda, PedidoVendaStatus } from "../../types/PedidoVenda";
+import type { PedidoVenda } from "../../types/PedidoVenda";
 
 import { layoutStyles } from "../../styles/layout";
 import { tableStyles } from "../../styles/table";
