@@ -479,64 +479,6 @@ export default function ComprasList() {
     return res.data;
   }
 
-  async function gerarContasDaCompra(row: any) {
-    const compraId = Number(row?.id);
-    if (!compraId) return;
-
-    const quantidadeStr = window.prompt("Quantidade de parcelas", "1");
-    if (quantidadeStr === null) return;
-
-    const quantidadeParcelas = Number(quantidadeStr);
-    if (!Number.isInteger(quantidadeParcelas) || quantidadeParcelas <= 0) {
-      toast.warning("Quantidade de parcelas inválida.");
-      return;
-    }
-
-    const dataPrimeiroVencimento = window.prompt(
-      "Data do primeiro vencimento (AAAA-MM-DD)",
-      row?.data_pedido || new Date().toISOString().slice(0, 10)
-    );
-    if (!dataPrimeiroVencimento) return;
-
-    const intervaloStr = window.prompt("Intervalo entre parcelas (dias)", "30");
-    if (intervaloStr === null) return;
-
-    const intervaloDias = Number(intervaloStr);
-    if (!Number.isFinite(intervaloDias) || intervaloDias < 0) {
-      toast.warning("Intervalo inválido.");
-      return;
-    }
-
-    const formaPagamento = window.prompt(
-      "Forma de pagamento",
-      "BOLETO"
-    );
-
-    const observacao = window.prompt(
-      "Observação",
-      `Gerado a partir da compra #${compraId}`
-    );
-
-    setFinanceiroLoadingId(compraId);
-
-    try {
-      await api.post(`/contas-pagar/gerar/${compraId}`, {
-        quantidade_parcelas: quantidadeParcelas,
-        data_primeiro_vencimento: dataPrimeiroVencimento,
-        intervalo_dias: intervaloDias,
-        forma_pagamento: formaPagamento || undefined,
-        observacao: observacao || undefined,
-      });
-
-      toast.success("Contas a pagar geradas com sucesso.");
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.response?.data?.error || "Erro ao gerar contas a pagar.");
-    } finally {
-      setFinanceiroLoadingId(null);
-    }
-  }
-
   async function acaoFinanceiraCompra(row: any) {
     const compraId = Number(row?.id);
     if (!compraId) return;
