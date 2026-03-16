@@ -21,6 +21,7 @@ import {
   FiXCircle,
   FiCornerUpLeft,
   FiRefreshCw,
+  FiFileText,
 } from "react-icons/fi";
 
 type ContratoOption = {
@@ -338,6 +339,27 @@ export default function PedidoVendaList() {
     for (const c of contratosOptions) m.set(Number(c.id), c);
     return m;
   }, [contratosOptions]);
+
+
+  async function emitirRelatorioPedido(id: number) {
+    try {
+      const res = await api.get(`/pedidosvenda/${id}/relatorio-operacional`, {
+        responseType: "blob",
+      });
+
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+
+      // abre em nova aba
+      window.open(url, "_blank", "noopener,noreferrer");
+
+      // libera memória depois de um tempo
+      setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+    } catch (error) {
+      console.error(error);
+      toast.error("Erro ao gerar relatório");
+    }
+  }
 
   async function loadCombos() {
     try {
@@ -799,7 +821,7 @@ export default function PedidoVendaList() {
 
                 <th style={{ ...tableStyles.th, width: 230, textAlign: "center" }}>Fluxo</th>
 
-                <th style={{ ...tableStyles.th, width: 150, textAlign: "center" }}>Ações</th>
+                <th style={{ ...tableStyles.th, width: 190, textAlign: "center" }}>Ações</th>
               </tr>
             </thead>
 
@@ -1067,7 +1089,7 @@ export default function PedidoVendaList() {
                     <td style={tdCompactCenter}>
                       <div style={actionsWrapStyle}>
                         <button
-                          style={{ ...buttonStyles.icon, opacity: perms.canOpen ? 1 : 0.35 }}
+                          style={{ ...buttonStyles.icon, opacity: perms.canOpen ? 1 : 0.55 }}
                           onClick={() => navigate(`/pedidosvenda/${r.id}/editar`)}
                           disabled={
                             !perms.canOpen ||
@@ -1095,6 +1117,22 @@ export default function PedidoVendaList() {
                           title="Alterar status (admin)"
                         >
                           <FiRefreshCw size={18} color="#0f766e" />
+                        </button>
+
+                        <button
+                          style={buttonStyles.icon}
+                          //onClick={() => emitirRelatorioPedido(Number(r.id))}
+                          onClick={() => emitirRelatorioPedido(r.id)}
+                          disabled={
+                            loading ||
+                            isDeleting ||
+                            isActing ||
+                            deletingId !== null ||
+                            actingId !== null
+                          }
+                          title="Emitir relatório do pedido"
+                        >
+                          <FiFileText size={18} color="#7c3aed" />
                         </button>
 
                         <button

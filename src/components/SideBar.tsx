@@ -16,7 +16,9 @@ import {
   FiGrid,
   FiClipboard,
   FiCreditCard,
-  FiBarChart2
+  FiBarChart2,
+  FiTrendingUp, 
+  FiShoppingBag
 } from "react-icons/fi";
 
 export default function Sidebar() {
@@ -25,6 +27,8 @@ export default function Sidebar() {
 
   const [openCadastro, setOpenCadastro] = useState(true);
   const [openEstoque, setOpenEstoque] = useState(true);
+  const [openMovimentacao, setOpenMovimentacao] = useState(true);
+  const [openFinanceiro, setOpenFinanceiro] = useState(true);
 
   function isActive(path: string) {
     if (path === "/") return location.pathname === "/";
@@ -68,7 +72,7 @@ export default function Sidebar() {
       path: "/formas-pagamento",
       label: "Formas de pagamento",
       icon: <FiCreditCard size={16} />,
-    }
+    },
   ];
 
   const estoqueItems = [
@@ -94,6 +98,37 @@ export default function Sidebar() {
     },
   ];
 
+  const movimentacaoItems = [
+    {
+      path: "/contratos",
+      label: "Contratos",
+      icon: <FiFileText size={16} />,
+    },
+    {
+      path: "/pedidosvenda",
+      label: "Vendas",
+      icon: <FiTrendingUp size={16} />,
+    },
+    {
+      path: "/compras",
+      label: "Compras",
+      icon: <FiShoppingBag size={16} />,
+    },
+  ];
+
+  const financeiroItems = [
+    {
+      path: "/contas-pagar",
+      label: "Contas a Pagar",
+      icon: <FiCreditCard size={16} />,
+    },
+    {
+      path: "/dashboard-financeiro",
+      label: "Dashboard Financeiro",
+      icon: <FiBarChart2 size={16} />,
+    },
+  ];
+
   const cadastrosActive = useMemo(
     () => cadastroItems.some((item) => isActive(item.path)),
     [location.pathname]
@@ -104,6 +139,16 @@ export default function Sidebar() {
     [location.pathname]
   );
 
+  const movimentacaoActive = useMemo(
+    () => movimentacaoItems.some((item) => isActive(item.path)),
+    [location.pathname]
+  );
+
+  const financeiroActive = useMemo(
+    () => financeiroItems.some((item) => isActive(item.path)),
+    [location.pathname]
+  );
+
   useEffect(() => {
     if (cadastrosActive) setOpenCadastro(true);
   }, [cadastrosActive]);
@@ -111,6 +156,14 @@ export default function Sidebar() {
   useEffect(() => {
     if (estoqueActive) setOpenEstoque(true);
   }, [estoqueActive]);
+
+  useEffect(() => {
+    if (movimentacaoActive) setOpenMovimentacao(true);
+  }, [movimentacaoActive]);
+
+  useEffect(() => {
+    if (financeiroActive) setOpenFinanceiro(true);
+  }, [financeiroActive]);
 
   const styles = {
     aside: {
@@ -359,11 +412,55 @@ export default function Sidebar() {
         <div style={styles.submenu}>{cadastroItems.map(renderSubItem)}</div>
       )}
 
-      {renderItem("/contratos", "Contratos", <FiFileText size={18} />)}
-      {renderItem("/pedidosvenda", "Vendas", <FiShoppingCart size={18} />)}
-      {renderItem("/compras", "Compras", <FiShoppingCart size={18} />)}
-      {renderItem("/contas-pagar", "Contas a Pagar", <FiCreditCard size={18} />)}
-      {renderItem("/dashboard-financeiro","Dashboard Financeiro",<FiBarChart2 size={16} />)},
+      <div
+        style={{
+          ...styles.menuItem,
+          ...(movimentacaoActive ? styles.activeItem : {}),
+        }}
+        onMouseEnter={handleMouseEnter(movimentacaoActive)}
+        onMouseLeave={handleMouseLeave(movimentacaoActive)}
+        onClick={() => setOpenMovimentacao((v) => !v)}
+      >
+        <span style={styles.iconWrap}>
+          <FiShoppingCart size={18} />
+        </span>
+        <span style={{ flex: 1 }}>Movimentação</span>
+        {openMovimentacao ? (
+          <FiChevronUp size={16} />
+        ) : (
+          <FiChevronDown size={16} />
+        )}
+      </div>
+
+      {openMovimentacao && (
+        <div style={styles.submenu}>
+          {movimentacaoItems.map(renderSubItem)}
+        </div>
+      )}
+
+      <div
+        style={{
+          ...styles.menuItem,
+          ...(financeiroActive ? styles.activeItem : {}),
+        }}
+        onMouseEnter={handleMouseEnter(financeiroActive)}
+        onMouseLeave={handleMouseLeave(financeiroActive)}
+        onClick={() => setOpenFinanceiro((v) => !v)}
+      >
+        <span style={styles.iconWrap}>
+          <FiCreditCard size={18} />
+        </span>
+        <span style={{ flex: 1 }}>Financeiro</span>
+        {openFinanceiro ? (
+          <FiChevronUp size={16} />
+        ) : (
+          <FiChevronDown size={16} />
+        )}
+      </div>
+
+      {openFinanceiro && (
+        <div style={styles.submenu}>{financeiroItems.map(renderSubItem)}</div>
+      )}
 
       <div
         style={{
