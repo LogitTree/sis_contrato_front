@@ -49,7 +49,9 @@ type PedidoItem = {
   | "RESERVADO"
   | "PARCIALMENTE_EXPEDIDO"
   | "EXPEDIDO"
-  | "CANCELADO";
+  | "CANCELADO"
+  | "DEVOLVIDO"
+  | "PARCIALMENTE_DEVOLVIDO";
 
   saldo_reservado?: number;
   saldo_pendente?: number;
@@ -780,7 +782,9 @@ export default function PedidoVendaEdit() {
   const canBaixarItens =
     pedidoStatus === "APROVADO" || pedidoStatus === "PARCIALMENTE_ATENDIDO";
   const canDevolverItens =
-    pedidoStatus === "ATENDIDO" || pedidoStatus === "CONCLUIDO";
+    pedidoStatus === "PARCIALMENTE_ATENDIDO" ||
+    pedidoStatus === "ATENDIDO" ||
+    pedidoStatus === "CONCLUIDO";
 
   const disableHeader = loading || savingHeader || !canEditHeader;
   const disableItem = loading || savingItem || !canManageDraftItems;
@@ -1084,7 +1088,8 @@ export default function PedidoVendaEdit() {
                 <th style={{ ...tableStyles.th, width: 110, textAlign: "right" }}>DEVOL.</th>
                 <th style={{ ...tableStyles.th, width: 110, textAlign: "right" }}>LÍQUIDO</th>
                 <th style={{ ...tableStyles.th, width: 150, textAlign: "right" }}>PREÇO</th>
-                <th style={{ ...tableStyles.th, width: 170, textAlign: "right" }}>SUBTOTAL</th>
+                <th style={{ ...tableStyles.th, width: 150, textAlign: "right" }}>TOTAL PEDIDO</th>
+                <th style={{ ...tableStyles.th, width: 150, textAlign: "right" }}>TOTAL LÍQUIDO</th>
                 <th style={{ ...tableStyles.th, width: 160, textAlign: "center" }}>STATUS ITEM</th>
                 <th style={{ ...tableStyles.th, width: 170, textAlign: "center" }}>AÇÕES</th>
               </tr>
@@ -1093,7 +1098,7 @@ export default function PedidoVendaEdit() {
             <tbody>
               {itens.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={11} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
+                  <td colSpan={14} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
                     Nenhum item inserido ainda.
                   </td>
                 </tr>
@@ -1102,20 +1107,22 @@ export default function PedidoVendaEdit() {
               {itens.map((it, idx) => {
                 const qtdN = toNumberAny(it.qtd);
                 const precoN = moneyFromApi(it.preco_unitario);
-                const subtotal = qtdN * precoN;
 
                 const qtdReservada = toNumberAny(it.qtd_reservada);
                 const qtdExpedida = toNumberAny(it.qtd_expedida);
                 const qtdCancelada = toNumberAny(it.qtd_cancelada);
-
                 const qtdDevolvida = toNumberAny(it.qtd_devolvida);
+
                 const qtdLiquida = Math.max(0, qtdExpedida - qtdDevolvida);
+
+                const totalPedido = qtdN * precoN;
+                const totalLiquidoItem = qtdLiquida * precoN;
 
                 const saldoPendente =
                   it.saldo_pendente ?? Math.max(0, qtdN - qtdCancelada - qtdExpedida);
 
                 const saldoReservado =
-                  it.saldo_reservado ?? Math.max(0, qtdReservada - qtdExpedida);
+                  it.saldo_reservado ?? Math.max(0, qtdReservada);
 
                 const option = contratoItensOptions.find((x) => x.id === it.contrato_item_id);
                 const unid = option?.unidade_contratada ?? "UN";
@@ -1168,7 +1175,19 @@ export default function PedidoVendaEdit() {
                     </td>
 
                     <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8, fontWeight: 800 }}>
-                      R$ {formatMoneyBR(subtotal)}
+                      R$ {formatMoneyBR(totalPedido)}
+                    </td>
+
+                    <td
+                      style={{
+                        ...tableStyles.td,
+                        textAlign: "right",
+                        paddingRight: 8,
+                        fontWeight: 800,
+                        color: totalLiquidoItem < totalPedido ? "#9a3412" : "#166534",
+                      }}
+                    >
+                      R$ {formatMoneyBR(totalLiquidoItem)}
                     </td>
 
                     <td style={{ ...tableStyles.td, textAlign: "center" }}>
@@ -1184,23 +1203,6 @@ export default function PedidoVendaEdit() {
 
                     <td style={{ ...tableStyles.td, textAlign: "center" }}>
                       <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-                        <button
-                          style={{ ...buttonStyles.icon, opacity: togglingItemId === it.id ? 0.6 : 1 }}
-                          onClick={() => handleAprovarItem(it.id)}
-                          disabled={togglingItemId === it.id}
-                          title="Aprovar item"
-                        >
-                          <FiCheckCircle size={18} color="#16a34a" />
-                        </button>
-
-                        <button
-                          style={{ ...buttonStyles.icon, opacity: togglingItemId === it.id ? 0.6 : 1 }}
-                          onClick={() => openReprovarModal(it)}
-                          disabled={togglingItemId === it.id}
-                          title="Reprovar item"
-                        >
-                          <FiXCircle size={18} color="#dc2626" />
-                        </button>
 
                         <button
                           style={{ ...buttonStyles.icon, opacity: saldoReservado > 0 ? 1 : 0.35 }}
@@ -1247,7 +1249,7 @@ export default function PedidoVendaEdit() {
 
               {loading && (
                 <tr>
-                  <td colSpan={11} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
+                  <td colSpan={14} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
                     Carregando...
                   </td>
                 </tr>
@@ -1383,10 +1385,7 @@ export default function PedidoVendaEdit() {
                 <b>Saldo reservado:</b>{" "}
                 {formatQtyBR(
                   itemBaixa.saldo_reservado ??
-                  Math.max(
-                    0,
-                    toNumberAny(itemBaixa.qtd_reservada) - toNumberAny(itemBaixa.qtd_expedida)
-                  )
+                  Math.max(0, toNumberAny(itemBaixa.qtd_reservada))
                 )}
               </div>
             </div>

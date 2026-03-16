@@ -20,7 +20,6 @@ import {
   FiLock,
   FiXCircle,
   FiCornerUpLeft,
-  FiRefreshCw,
   FiFileText,
 } from "react-icons/fi";
 
@@ -175,10 +174,10 @@ function flowPerms(status?: string) {
     canCancelar:
       s === "RASCUNHO" ||
       s === "APROVADO" ||
-      s === "PARCIALMENTE_ATENDIDO" ||
-      s === "ATENDIDO",
+      s === "PARCIALMENTE_ATENDIDO",
 
     canDevolver:
+      s === "PARCIALMENTE_ATENDIDO" ||
       s === "ATENDIDO" ||
       s === "CONCLUIDO" ||
       s === "CONCLUÍDO" ||
@@ -254,11 +253,6 @@ export default function PedidoVendaList() {
 
   const [contratosOptions, setContratosOptions] = useState<ContratoOption[]>([]);
   const [empresasOptions, setEmpresasOptions] = useState<EmpresaOption[]>([]);
-
-  const [statusModalOpen, setStatusModalOpen] = useState(false);
-  const [statusPedidoId, setStatusPedidoId] = useState<number | null>(null);
-  const [novoStatus, setNovoStatus] = useState<PedidoVendaStatus>("RASCUNHO");
-  const [savingStatus, setSavingStatus] = useState(false);
 
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [actingId, setActingId] = useState<number | null>(null);
@@ -465,29 +459,6 @@ export default function PedidoVendaList() {
       return toNumberSafe(row.total_liquido);
     }
     return null;
-  }
-
-  function abrirModalStatus(pedido: any) {
-    setStatusPedidoId(pedido.id);
-    setNovoStatus((pedido.status as PedidoVendaStatus) || "RASCUNHO");
-    setStatusModalOpen(true);
-  }
-
-  async function salvarStatus() {
-    if (!statusPedidoId) return;
-
-    setSavingStatus(true);
-    try {
-      await api.put(`/pedidosvenda/${statusPedidoId}`, { status: novoStatus });
-      toast.success("Status atualizado!");
-      setStatusModalOpen(false);
-      await carregarPedidos();
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.response?.data?.error || "Erro ao atualizar status");
-    } finally {
-      setSavingStatus(false);
-    }
   }
 
   async function excluirPedido(pedido: any) {
@@ -821,7 +792,7 @@ export default function PedidoVendaList() {
 
                 <th style={{ ...tableStyles.th, width: 230, textAlign: "center" }}>Fluxo</th>
 
-                <th style={{ ...tableStyles.th, width: 190, textAlign: "center" }}>Ações</th>
+                <th style={{ ...tableStyles.th, width: 150, textAlign: "center" }}>Ações</th>
               </tr>
             </thead>
 
@@ -1106,21 +1077,6 @@ export default function PedidoVendaList() {
 
                         <button
                           style={buttonStyles.icon}
-                          onClick={() => abrirModalStatus(r)}
-                          disabled={
-                            loading ||
-                            isDeleting ||
-                            isActing ||
-                            deletingId !== null ||
-                            actingId !== null
-                          }
-                          title="Alterar status (admin)"
-                        >
-                          <FiRefreshCw size={18} color="#0f766e" />
-                        </button>
-
-                        <button
-                          style={buttonStyles.icon}
                           //onClick={() => emitirRelatorioPedido(Number(r.id))}
                           onClick={() => emitirRelatorioPedido(r.id)}
                           disabled={
@@ -1207,76 +1163,6 @@ export default function PedidoVendaList() {
           </div>
         )}
       </div>
-
-      {statusModalOpen && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15,23,42,0.45)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-            zIndex: 50,
-          }}
-          onClick={() => !savingStatus && setStatusModalOpen(false)}
-        >
-          <div
-            style={{
-              width: 420,
-              maxWidth: "100%",
-              background: "#fff",
-              borderRadius: 14,
-              boxShadow: "0 20px 45px rgba(0,0,0,0.18)",
-              padding: 16,
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ fontWeight: 800, fontSize: 14, color: "#0f172a" }}>
-              Alterar status do pedido #{statusPedidoId}
-            </div>
-
-            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
-                Status
-              </label>
-              <select
-                value={novoStatus}
-                onChange={(e) => setNovoStatus(e.target.value as PedidoVendaStatus)}
-                style={{ ...filterStyles.select, height: 38, padding: "0 12px" }}
-                disabled={savingStatus}
-              >
-                <option value="RASCUNHO">Rascunho</option>
-                <option value="APROVADO">Aprovado</option>
-                <option value="PARCIALMENTE_ATENDIDO">Parcialmente Atendido</option>
-                <option value="ATENDIDO">Atendido</option>
-                <option value="CONCLUIDO">Concluído</option>
-                <option value="CANCELADO">Cancelado</option>
-                <option value="DEVOLVIDO">Devolvido</option>
-              </select>
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
-              <button
-                style={buttonStyles.link}
-                onClick={() => setStatusModalOpen(false)}
-                disabled={savingStatus}
-              >
-                Cancelar
-              </button>
-
-              <button
-                style={{ ...buttonStyles.primary, height: 38, padding: "0 14px" }}
-                onClick={salvarStatus}
-                disabled={savingStatus || !statusPedidoId}
-              >
-                {savingStatus ? "Salvando..." : "Salvar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
