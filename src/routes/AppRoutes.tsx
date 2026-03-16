@@ -43,6 +43,12 @@ import InventarioCreate from "../pages/Estoque/InventarioCreate";
 import InventarioList from "../pages/Estoque/InventarioList";
 import InventarioDetail from "../pages/Estoque/InventarioDetail";
 import InventarioScanner from "../pages/Estoque/InventarioScanner";
+import ContasPagarList from "../pages/ContasPagar/List";
+import FormasPagamentoList from "../pages/FormasPagamento/List";
+import FormaPagamentoCreate from "../pages/FormasPagamento/Create";
+import FormaPagamentoEdit from "../pages/FormasPagamento/Edit";
+import ContasPagarDetail from "../pages/ContasPagar/Detail";
+import DashboardFinanceiro from "../pages/DashboardFinanceiro";
 
 export default function AppRoutes() {
   return (
@@ -107,6 +113,15 @@ export default function AppRoutes() {
               <Route path="/fornecedores" element={<Fornecedor />} />
               <Route path="/fornecedores/novo" element={<FornecedorCreate />} />
               <Route path="/fornecedores/:id/editar" element={<FornecedorEdit />} />
+
+              <Route path="/formas-pagamento" element={<FormasPagamentoList />} />
+              <Route path="/formas-pagamento/novo" element={<FormaPagamentoCreate />} />
+              <Route path="/formas-pagamento/:id/editar" element={<FormaPagamentoEdit />} />
+
+              <Route path="/contas-pagar" element={<ContasPagarList />} />
+              <Route path="/contas-pagar/:id" element={<ContasPagarDetail />} />
+
+              <Route path="/dashboard-financeiro" element={<DashboardFinanceiro />} />
             </Route>
           </Route>
 

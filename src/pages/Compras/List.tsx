@@ -15,6 +15,8 @@ import {
   FiTrash2,
   FiPackage,
   FiXCircle,
+  FiCreditCard,
+  FiX,
 } from "react-icons/fi";
 
 type CompraStatus =
@@ -53,6 +55,20 @@ type CompraRow = {
 type FornecedorOption = {
   id: number;
   nome: string;
+};
+
+type FormaPagamentoOption = {
+  id: number;
+  descricao: string;
+  ativo: boolean;
+  permite_parcelamento: boolean;
+};
+
+type ParcelaPreview = {
+  parcela: number;
+  total_parcelas: number;
+  data_vencimento: string;
+  valor_original: number;
 };
 
 function parseDecimalApi(v: any): number {
@@ -196,6 +212,61 @@ function formatQtyBR(v: any): string {
   });
 }
 
+function toIsoDate(value: any) {
+  if (!value) return new Date().toISOString().slice(0, 10);
+
+  const s = String(value).slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDays(dateString: string, days: number) {
+  const dt = new Date(`${dateString}T00:00:00`);
+  dt.setDate(dt.getDate() + Number(days || 0));
+  return dt.toISOString().slice(0, 10);
+}
+
+function round2(value: number) {
+  return Number(Number(value || 0).toFixed(2));
+}
+
+function gerarPreviewParcelas(
+  valorTotal: number,
+  quantidadeParcelas: number,
+  dataPrimeiroVencimento: string,
+  intervaloDias: number
+): ParcelaPreview[] {
+  const total = round2(valorTotal);
+  const qtd = Math.max(1, Number(quantidadeParcelas || 1));
+  const valorBase = Math.floor((total / qtd) * 100) / 100;
+
+  const parcelas: ParcelaPreview[] = [];
+  let soma = 0;
+
+  for (let i = 1; i <= qtd; i++) {
+    let valorParcela = valorBase;
+
+    if (i === qtd) {
+      valorParcela = round2(total - soma);
+    }
+
+    soma = round2(soma + valorParcela);
+
+    parcelas.push({
+      parcela: i,
+      total_parcelas: qtd,
+      data_vencimento: addDays(
+        dataPrimeiroVencimento,
+        (i - 1) * Number(intervaloDias || 0)
+      ),
+      valor_original: valorParcela,
+    });
+  }
+
+  return parcelas;
+}
+
 export default function ComprasList() {
   const navigate = useNavigate();
 
@@ -221,6 +292,8 @@ export default function ComprasList() {
   >([]);
 
   const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const [financeiroLoadingId, setFinanceiroLoadingId] = useState<number | null>(null);
 
   const hasFilters =
     !!filtroFornecedorId ||
@@ -252,6 +325,21 @@ export default function ComprasList() {
     for (const f of fornecedoresOptions) m.set(Number(f.id), f);
     return m;
   }, [fornecedoresOptions]);
+
+  const [formasPagamento, setFormasPagamento] = useState<FormaPagamentoOption[]>([]);
+
+  const [financeiroModalOpen, setFinanceiroModalOpen] = useState(false);
+  const [financeiroCompra, setFinanceiroCompra] = useState<CompraRow | null>(null);
+
+  const [financeiroForm, setFinanceiroForm] = useState({
+    forma_pagamento: "",
+    quantidade_parcelas: 1,
+    data_primeiro_vencimento: "",
+    intervalo_dias: 30,
+    observacao: "",
+  });
+
+  const [financeiroSaving, setFinanceiroSaving] = useState(false);
 
   async function loadFornecedores() {
     try {
@@ -306,6 +394,25 @@ export default function ComprasList() {
       toast.error("Erro ao carregar compras");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadFormasPagamento() {
+    try {
+      const res = await api.get("/formas-pagamento", {
+        params: { ativo: true, page: 1, limit: 1000, sort: "descricao", order: "ASC" },
+      });
+
+      const arr =
+        res.data?.data ??
+        res.data?.rows ??
+        res.data?.items ??
+        [];
+
+      setFormasPagamento(arr);
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao carregar formas de pagamento");
     }
   }
 
@@ -367,8 +474,118 @@ export default function ComprasList() {
     }
   }
 
+  async function buscarContasDaCompra(compraId: number) {
+    const res = await api.get(`/contas-pagar/compra/${compraId}`);
+    return res.data;
+  }
+
+  async function gerarContasDaCompra(row: any) {
+    const compraId = Number(row?.id);
+    if (!compraId) return;
+
+    const quantidadeStr = window.prompt("Quantidade de parcelas", "1");
+    if (quantidadeStr === null) return;
+
+    const quantidadeParcelas = Number(quantidadeStr);
+    if (!Number.isInteger(quantidadeParcelas) || quantidadeParcelas <= 0) {
+      toast.warning("Quantidade de parcelas inválida.");
+      return;
+    }
+
+    const dataPrimeiroVencimento = window.prompt(
+      "Data do primeiro vencimento (AAAA-MM-DD)",
+      row?.data_pedido || new Date().toISOString().slice(0, 10)
+    );
+    if (!dataPrimeiroVencimento) return;
+
+    const intervaloStr = window.prompt("Intervalo entre parcelas (dias)", "30");
+    if (intervaloStr === null) return;
+
+    const intervaloDias = Number(intervaloStr);
+    if (!Number.isFinite(intervaloDias) || intervaloDias < 0) {
+      toast.warning("Intervalo inválido.");
+      return;
+    }
+
+    const formaPagamento = window.prompt(
+      "Forma de pagamento",
+      "BOLETO"
+    );
+
+    const observacao = window.prompt(
+      "Observação",
+      `Gerado a partir da compra #${compraId}`
+    );
+
+    setFinanceiroLoadingId(compraId);
+
+    try {
+      await api.post(`/contas-pagar/gerar/${compraId}`, {
+        quantidade_parcelas: quantidadeParcelas,
+        data_primeiro_vencimento: dataPrimeiroVencimento,
+        intervalo_dias: intervaloDias,
+        forma_pagamento: formaPagamento || undefined,
+        observacao: observacao || undefined,
+      });
+
+      toast.success("Contas a pagar geradas com sucesso.");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.response?.data?.error || "Erro ao gerar contas a pagar.");
+    } finally {
+      setFinanceiroLoadingId(null);
+    }
+  }
+
+  async function acaoFinanceiraCompra(row: any) {
+    const compraId = Number(row?.id);
+    if (!compraId) return;
+
+    setFinanceiroLoadingId(compraId);
+
+    try {
+      const result = await buscarContasDaCompra(compraId);
+      const quantidade = Number(result?.quantidade || 0);
+      const contas = Array.isArray(result?.contas) ? result.contas : [];
+
+      if (quantidade <= 0 || contas.length === 0) {
+        abrirFinanceiroModal(row);
+        return;
+      }
+
+      navigate(`/contas-pagar?compra_id=${compraId}`);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.response?.data?.error || "Erro ao carregar financeiro da compra.");
+    } finally {
+      setFinanceiroLoadingId(null);
+    }
+  }
+
+  function abrirFinanceiroModal(row: CompraRow) {
+    const dataBase = toIsoDate(row.data_pedido);
+    const formaPadrao = String((row as any)?.forma_pagamento || "").trim();
+
+    setFinanceiroCompra(row);
+    setFinanceiroForm({
+      forma_pagamento: formaPadrao,
+      quantidade_parcelas: 1,
+      data_primeiro_vencimento: dataBase,
+      intervalo_dias: 30,
+      observacao: `Gerado a partir da compra #${row.id}`,
+    });
+    setFinanceiroModalOpen(true);
+  }
+
+  function fecharFinanceiroModal() {
+    if (financeiroSaving) return;
+    setFinanceiroModalOpen(false);
+    setFinanceiroCompra(null);
+  }
+
   useEffect(() => {
     loadFornecedores();
+    loadFormasPagamento();
     carregarCompras();
   }, []);
 
@@ -423,6 +640,83 @@ export default function ComprasList() {
 
   const totalPages = Math.ceil(total / limit);
 
+  const previewParcelas = useMemo(() => {
+    if (!financeiroCompra) return [];
+
+    const valorTotal = getTotalCompra(financeiroCompra) || 0;
+    if (valorTotal <= 0) return [];
+
+    return gerarPreviewParcelas(
+      valorTotal,
+      Number(financeiroForm.quantidade_parcelas || 1),
+      financeiroForm.data_primeiro_vencimento || toIsoDate(financeiroCompra.data_pedido),
+      Number(financeiroForm.intervalo_dias || 30)
+    );
+  }, [financeiroCompra, financeiroForm]);
+
+  async function confirmarGeracaoFinanceira() {
+    if (!financeiroCompra) return;
+
+    const compraId = Number(financeiroCompra.id);
+    const valorTotal = getTotalCompra(financeiroCompra) || 0;
+
+    if (valorTotal <= 0) {
+      toast.warning("A compra precisa ter valor total válido.");
+      return;
+    }
+
+    if (!financeiroForm.forma_pagamento) {
+      toast.warning("Selecione a forma de pagamento.");
+      return;
+    }
+
+    if (!financeiroForm.data_primeiro_vencimento) {
+      toast.warning("Informe o primeiro vencimento.");
+      return;
+    }
+
+    if (!Number.isInteger(Number(financeiroForm.quantidade_parcelas)) || Number(financeiroForm.quantidade_parcelas) <= 0) {
+      toast.warning("Quantidade de parcelas inválida.");
+      return;
+    }
+
+    if (!Number.isFinite(Number(financeiroForm.intervalo_dias)) || Number(financeiroForm.intervalo_dias) < 0) {
+      toast.warning("Intervalo inválido.");
+      return;
+    }
+
+    setFinanceiroSaving(true);
+    setFinanceiroLoadingId(compraId);
+
+    try {
+      await api.post(`/contas-pagar/gerar/${compraId}`, {
+        quantidade_parcelas: Number(financeiroForm.quantidade_parcelas),
+        data_primeiro_vencimento: financeiroForm.data_primeiro_vencimento,
+        intervalo_dias: Number(financeiroForm.intervalo_dias),
+        forma_pagamento: financeiroForm.forma_pagamento,
+        observacao: financeiroForm.observacao || undefined,
+      });
+
+      toast.success("Contas a pagar geradas com sucesso.");
+
+      // ✅ ATUALIZA A LINHA DA COMPRA NA LISTA
+      setRows((old) =>
+        old.map((c) =>
+          c.id === compraId ? { ...c, tem_contas_pagar: true } : c
+        )
+      );
+
+
+      fecharFinanceiroModal();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.response?.data?.error || "Erro ao gerar contas a pagar.");
+    } finally {
+      setFinanceiroSaving(false);
+      setFinanceiroLoadingId(null);
+    }
+  }
+
   return (
     <div style={layoutStyles.page}>
       <div style={layoutStyles.header}>
@@ -464,7 +758,7 @@ export default function ComprasList() {
                   height: 36,
                   padding: "0 12px",
                 }}
-                disabled={loading || deletingId !== null}
+                disabled={loading || deletingId !== null || financeiroLoadingId !== null}
               >
                 <option value="">Todos</option>
                 {fornecedoresOptions.map((f) => (
@@ -645,7 +939,7 @@ export default function ComprasList() {
                 </th>
 
                 <th
-                  style={{ ...tableStyles.th, width: 170, textAlign: "center" }}
+                  style={{ ...tableStyles.th, width: 210, textAlign: "center" }}
                 >
                   Ações
                 </th>
@@ -787,7 +1081,7 @@ export default function ComprasList() {
                                 : `/compras/${r.id}`
                             )
                           }
-                          disabled={loading || isDeleting}
+                          disabled={loading || isDeleting || financeiroLoadingId !== null}
                           title={podeEditar ? "Editar" : "Visualizar"}
                         >
                           <FiEdit size={18} color="#2563eb" />
@@ -796,7 +1090,7 @@ export default function ComprasList() {
                         <button
                           style={buttonStyles.icon}
                           onClick={() => navigate(`/compras/${r.id}/receber`)}
-                          disabled={loading || isDeleting || !podeReceber}
+                          disabled={loading || isDeleting || financeiroLoadingId !== null || !podeReceber}
                           title={
                             podeReceber
                               ? "Receber"
@@ -811,8 +1105,20 @@ export default function ComprasList() {
 
                         <button
                           style={buttonStyles.icon}
+                          onClick={() => acaoFinanceiraCompra(r)}
+                          disabled={loading || isDeleting || financeiroLoadingId === Number(r.id)}
+                          title="Financeiro / Contas a pagar"
+                        >
+                          <FiCreditCard
+                            size={18}
+                            color={r.tem_contas_pagar ? "#16a34a" : "#64748b"}
+                          />
+                        </button>
+
+                        <button
+                          style={buttonStyles.icon}
                           onClick={() => cancelarCompra(r)}
-                          disabled={loading || isDeleting || !podeCancelar}
+                          disabled={loading || isDeleting || financeiroLoadingId !== null || !podeCancelar}
                           title={
                             podeCancelar
                               ? "Cancelar"
@@ -828,7 +1134,7 @@ export default function ComprasList() {
                         <button
                           style={buttonStyles.icon}
                           onClick={() => excluirCompra(r)}
-                          disabled={loading || isDeleting || !podeExcluir}
+                          disabled={loading || isDeleting || financeiroLoadingId !== null || !podeExcluir}
                           title={
                             podeExcluir
                               ? "Excluir"
@@ -900,6 +1206,325 @@ export default function ComprasList() {
           </div>
         )}
       </div>
+      {financeiroModalOpen && financeiroCompra && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 980,
+              maxHeight: "90vh",
+              overflowY: "auto",
+              background: "#fff",
+              borderRadius: 16,
+              boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
+              border: "1px solid #e5e7eb",
+            }}
+          >
+            <div
+              style={{
+                padding: "18px 20px",
+                borderBottom: "1px solid #e5e7eb",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: "#0f172a" }}>
+                  Gerar Contas a Pagar
+                </div>
+                <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
+                  Compra #{financeiroCompra.id}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={fecharFinanceiroModal}
+                disabled={financeiroSaving}
+                style={{
+                  border: 0,
+                  background: "transparent",
+                  cursor: "pointer",
+                  padding: 6,
+                }}
+              >
+                <FiX size={20} color="#64748b" />
+              </button>
+            </div>
+
+            <div style={{ padding: 20, display: "grid", gap: 20 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: 16,
+                  background: "#f8fafc",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 12,
+                  padding: 16,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
+                    Compra
+                  </div>
+                  <div style={{ marginTop: 4, fontWeight: 600 }}>
+                    #{financeiroCompra.id}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
+                    Fornecedor
+                  </div>
+                  <div style={{ marginTop: 4, fontWeight: 600 }}>
+                    {financeiroCompra?.fornecedor?.nome ??
+                      fornecedoresMap.get(Number(financeiroCompra.fornecedor_id || 0))?.nome ??
+                      "-"}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
+                    Data do pedido
+                  </div>
+                  <div style={{ marginTop: 4, fontWeight: 600 }}>
+                    {formatDateBR(financeiroCompra.data_pedido)}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
+                    Valor total
+                  </div>
+                  <div style={{ marginTop: 4, fontWeight: 700, color: "#0f172a" }}>
+                    {formatMoneyBR(getTotalCompra(financeiroCompra))}
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: 16,
+                }}
+              >
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
+                    Forma de pagamento
+                  </label>
+                  <select
+                    value={financeiroForm.forma_pagamento}
+                    onChange={(e) =>
+                      setFinanceiroForm((old) => ({
+                        ...old,
+                        forma_pagamento: e.target.value,
+                      }))
+                    }
+                    style={{
+                      ...filterStyles.select,
+                      height: 40,
+                      padding: "0 12px",
+                      marginTop: 6,
+                    }}
+                    disabled={financeiroSaving}
+                  >
+                    <option value="">Selecione</option>
+                    {formasPagamento.map((fp) => (
+                      <option key={fp.id} value={fp.descricao}>
+                        {fp.descricao}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
+                    Quantidade de parcelas
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={financeiroForm.quantidade_parcelas}
+                    onChange={(e) =>
+                      setFinanceiroForm((old) => ({
+                        ...old,
+                        quantidade_parcelas: Number(e.target.value || 1),
+                      }))
+                    }
+                    style={{
+                      ...filterStyles.input,
+                      height: 40,
+                      padding: "0 12px",
+                      marginTop: 6,
+                    }}
+                    disabled={financeiroSaving}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
+                    Primeiro vencimento
+                  </label>
+                  <input
+                    type="date"
+                    value={financeiroForm.data_primeiro_vencimento}
+                    onChange={(e) =>
+                      setFinanceiroForm((old) => ({
+                        ...old,
+                        data_primeiro_vencimento: e.target.value,
+                      }))
+                    }
+                    style={{
+                      ...filterStyles.input,
+                      height: 40,
+                      padding: "0 12px",
+                      marginTop: 6,
+                    }}
+                    disabled={financeiroSaving}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
+                    Intervalo entre parcelas (dias)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={financeiroForm.intervalo_dias}
+                    onChange={(e) =>
+                      setFinanceiroForm((old) => ({
+                        ...old,
+                        intervalo_dias: Number(e.target.value || 0),
+                      }))
+                    }
+                    style={{
+                      ...filterStyles.input,
+                      height: 40,
+                      padding: "0 12px",
+                      marginTop: 6,
+                    }}
+                    disabled={financeiroSaving}
+                  />
+                </div>
+
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
+                    Observação
+                  </label>
+                  <textarea
+                    value={financeiroForm.observacao}
+                    onChange={(e) =>
+                      setFinanceiroForm((old) => ({
+                        ...old,
+                        observacao: e.target.value,
+                      }))
+                    }
+                    style={{
+                      ...filterStyles.input,
+                      minHeight: 90,
+                      padding: 12,
+                      marginTop: 6,
+                      resize: "vertical",
+                    }}
+                    disabled={financeiroSaving}
+                  />
+                </div>
+              </div>
+
+              <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden" }}>
+                <div
+                  style={{
+                    padding: "12px 16px",
+                    background: "#f8fafc",
+                    borderBottom: "1px solid #e5e7eb",
+                    fontSize: 14,
+                    fontWeight: 700,
+                    color: "#0f172a",
+                  }}
+                >
+                  Prévia das parcelas
+                </div>
+
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ ...tableStyles.table, tableLayout: "fixed" }}>
+                    <thead>
+                      <tr>
+                        <th style={{ ...tableStyles.th, width: 120 }}>Parcela</th>
+                        <th style={{ ...tableStyles.th, width: 180 }}>Vencimento</th>
+                        <th style={{ ...tableStyles.th, width: 180, textAlign: "right" }}>
+                          Valor
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewParcelas.map((p) => (
+                        <tr key={p.parcela}>
+                          <td style={tdCompactCenter}>
+                            {p.parcela}/{p.total_parcelas}
+                          </td>
+                          <td style={tdCompact}>{formatDateBR(p.data_vencimento)}</td>
+                          <td style={tdCompactRight}>{formatMoneyBR(p.valor_original)}</td>
+                        </tr>
+                      ))}
+
+                      {previewParcelas.length === 0 && (
+                        <tr>
+                          <td colSpan={3} style={{ textAlign: "center", padding: 20 }}>
+                            Nenhuma parcela para exibir.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: 20,
+                borderTop: "1px solid #e5e7eb",
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 12,
+              }}
+            >
+              <button
+                type="button"
+                style={buttonStyles.link}
+                onClick={fecharFinanceiroModal}
+                disabled={financeiroSaving}
+              >
+                Fechar
+              </button>
+
+              <button
+                type="button"
+                style={buttonStyles.primary}
+                onClick={confirmarGeracaoFinanceira}
+                disabled={financeiroSaving}
+              >
+                Gerar contas a pagar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -14,7 +14,9 @@ import {
   FiActivity,
   FiLayers,
   FiGrid,
-  FiClipboard
+  FiClipboard,
+  FiCreditCard,
+  FiBarChart2
 } from "react-icons/fi";
 
 export default function Sidebar() {
@@ -62,6 +64,11 @@ export default function Sidebar() {
       label: "Subgrupo de produtos",
       icon: <FiGrid size={16} />,
     },
+    {
+      path: "/formas-pagamento",
+      label: "Formas de pagamento",
+      icon: <FiCreditCard size={16} />,
+    }
   ];
 
   const estoqueItems = [
@@ -81,10 +88,10 @@ export default function Sidebar() {
       icon: <FiBox size={16} />,
     },
     {
-      label: "Inventário",
       path: "/estoque/inventario",
+      label: "Inventário",
       icon: <FiClipboard size={16} />,
-    }
+    },
   ];
 
   const cadastrosActive = useMemo(
@@ -195,7 +202,8 @@ export default function Sidebar() {
     },
 
     activeItem: {
-      background: "linear-gradient(90deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))",
+      background:
+        "linear-gradient(90deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))",
       border: "1px solid rgba(59,130,246,0.28)",
       color: "#ffffff",
       boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.02)",
@@ -347,11 +355,15 @@ export default function Sidebar() {
         {openCadastro ? <FiChevronUp size={16} /> : <FiChevronDown size={16} />}
       </div>
 
-      {openCadastro && <div style={styles.submenu}>{cadastroItems.map(renderSubItem)}</div>}
+      {openCadastro && (
+        <div style={styles.submenu}>{cadastroItems.map(renderSubItem)}</div>
+      )}
 
       {renderItem("/contratos", "Contratos", <FiFileText size={18} />)}
       {renderItem("/pedidosvenda", "Vendas", <FiShoppingCart size={18} />)}
       {renderItem("/compras", "Compras", <FiShoppingCart size={18} />)}
+      {renderItem("/contas-pagar", "Contas a Pagar", <FiCreditCard size={18} />)}
+      {renderItem("/dashboard-financeiro","Dashboard Financeiro",<FiBarChart2 size={16} />)},
 
       <div
         style={{
@@ -369,11 +381,11 @@ export default function Sidebar() {
         {openEstoque ? <FiChevronUp size={16} /> : <FiChevronDown size={16} />}
       </div>
 
-      {openEstoque && <div style={styles.submenu}>{estoqueItems.map(renderSubItem)}</div>}
+      {openEstoque && (
+        <div style={styles.submenu}>{estoqueItems.map(renderSubItem)}</div>
+      )}
 
-      <div style={styles.footer}>
-        Ambiente administrativo
-      </div>
+      <div style={styles.footer}>Ambiente administrativo</div>
     </aside>
   );
 }
