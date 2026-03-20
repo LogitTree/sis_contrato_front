@@ -95,7 +95,7 @@ export default function ContratoCreate() {
   useEffect(() => {
     async function loadAllProdutos() {
       let page = 1;
-      const limit = 500;
+      const limit = 1000;
       let acumulado: any[] = [];
       let total = 0;
       let finished = false;

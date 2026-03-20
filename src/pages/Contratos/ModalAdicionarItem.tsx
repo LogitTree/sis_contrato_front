@@ -52,16 +52,53 @@ export default function ModalAdicionarItem({
   /* =========================
      LOAD PRODUTOS
   ========================= */
-  useEffect(() => {
-    api
-      .get('/produtos')
-      .then(res => {
-        setProdutos(extrairArray(res.data));
-      })
-      .catch(() => {
-        toast.error('Erro ao carregar produtos');
-        setProdutos([]);
+  async function loadAllProdutos() {
+    let page = 1;
+    const limit = 500;
+    let finished = false;
+    let acumulado: Produto[] = [];
+
+    while (!finished) {
+      const res = await api.get("/produtos", {
+        params: {
+          page,
+          limit,
+          orderBy: "nome",
+          orderDir: "ASC",
+        },
       });
+
+      const lista = extrairArray(res.data) as Produto[];
+      const total = Number(res.data?.total ?? 0);
+
+      acumulado = [...acumulado, ...lista];
+
+      if (!lista.length) {
+        finished = true;
+      } else if (total > 0) {
+        finished = acumulado.length >= total;
+      } else {
+        finished = lista.length < limit;
+      }
+
+      page += 1;
+    }
+
+    setProdutos(acumulado);
+  }
+
+  useEffect(() => {
+    async function carregarProdutos() {
+      try {
+        await loadAllProdutos();
+      } catch (error) {
+        console.error(error);
+        toast.error("Erro ao carregar produtos");
+        setProdutos([]);
+      }
+    }
+
+    carregarProdutos();
   }, []);
 
   function handleChange(
