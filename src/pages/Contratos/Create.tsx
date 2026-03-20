@@ -93,19 +93,46 @@ export default function ContratoCreate() {
      Load Selects
   ========================= */
   useEffect(() => {
+    async function loadAllProdutos() {
+      let page = 1;
+      const limit = 500;
+      let acumulado: any[] = [];
+      let total = 0;
+      let finished = false;
+
+      while (!finished) {
+        const res = await api.get("/produtos", {
+          params: { page, limit, orderBy: "nome", orderDir: "ASC" },
+        });
+
+        const lista = extrairArray(res?.data);
+        total = Number(res?.data?.total ?? 0);
+
+        acumulado = [...acumulado, ...lista];
+
+        if (!lista.length || acumulado.length >= total) {
+          finished = true;
+        } else {
+          page += 1;
+        }
+      }
+
+      setProdutos(acumulado);
+    }
+
     async function loadData() {
       setLoadingData(true);
 
       try {
-        const [orgaosRes, empresasRes, produtosRes] = await Promise.all([
+        const [orgaosRes, empresasRes] = await Promise.all([
           api.get("/orgaocontratante", { params: { limit: 1000 } }),
           api.get("/empresas", { params: { limit: 1000 } }),
-          api.get("/produtos", { params: { limit: 1000 } }),
         ]);
 
         setOrgaos(extrairArray(orgaosRes?.data));
         setEmpresas(extrairArray(empresasRes?.data));
-        setProdutos(extrairArray(produtosRes?.data));
+
+        await loadAllProdutos();
       } catch {
         toast.error("Erro ao carregar dados iniciais");
         setOrgaos([]);
