@@ -3,27 +3,35 @@ import {
   useContext,
   useEffect,
   useState,
-} from 'react';
+} from "react";
 import type { ReactNode } from "react";
 
-import api, { setAuthToken } from '../api/api';
+import api, { setAuthToken } from "../api/api";
 
 type User = {
   id: number;
   nome: string;
   email: string;
-  perfil: 'ADMIN' | 'GESTOR' | 'OPERADOR';
+  status?: "ATIVO" | "INATIVO";
   tenant_id: number | null;
+  grupo_usuario_id?: number | null;
+  grupo?: {
+    id: number;
+    nome: string;
+    descricao?: string;
+  } | null;
+  permissoes: string[];
 };
 
 type AuthContextData = {
   user: User | null;
+  permissoes: string[];
   isAuthenticated: boolean;
-  isAdmin: boolean;
-  isGestor: boolean;
   loading: boolean;
   login: (email: string, senha: string) => Promise<void>;
   logout: () => void;
+  hasPermission: (permission: string) => boolean;
+  hasAnyPermission: (permissions: string[]) => boolean;
 };
 
 type AuthProviderProps = {
@@ -36,9 +44,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const permissoes = user?.permissoes || [];
+
   useEffect(() => {
-    const token = localStorage.getItem('@contratos:token');
-    const storedUser = localStorage.getItem('@contratos:user');
+    const token = localStorage.getItem("@contratos:token");
+    const storedUser = localStorage.getItem("@contratos:user");
 
     try {
       if (token && storedUser) {
@@ -46,9 +56,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUser(JSON.parse(storedUser));
       }
     } catch (error) {
-      console.error('Erro ao reidratar sessão:', error);
-      localStorage.removeItem('@contratos:token');
-      localStorage.removeItem('@contratos:user');
+      console.error("Erro ao reidratar sessão:", error);
+      localStorage.removeItem("@contratos:token");
+      localStorage.removeItem("@contratos:user");
       setAuthToken(null);
       setUser(null);
     } finally {
@@ -57,38 +67,49 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   async function login(email: string, senha: string) {
-    const response = await api.post('/auth/login', {
+    const response = await api.post("/auth/login", {
       email,
       senha,
     });
 
     const { token, user } = response.data;
 
-    localStorage.setItem('@contratos:token', token);
-    localStorage.setItem('@contratos:user', JSON.stringify(user));
+    localStorage.setItem("@contratos:token", token);
+    localStorage.setItem("@contratos:user", JSON.stringify(user));
 
     setAuthToken(token);
     setUser(user);
   }
 
   function logout() {
-    localStorage.removeItem('@contratos:token');
-    localStorage.removeItem('@contratos:user');
+    localStorage.removeItem("@contratos:token");
+    localStorage.removeItem("@contratos:user");
 
     setAuthToken(null);
     setUser(null);
+  }
+
+  function hasPermission(permission: string) {
+    return permissoes.includes(permission);
+  }
+
+  function hasAnyPermission(permissionsToCheck: string[]) {
+    return permissionsToCheck.some((permission) =>
+      permissoes.includes(permission)
+    );
   }
 
   return (
     <AuthContext.Provider
       value={{
         user,
+        permissoes,
         isAuthenticated: !!user,
-        isAdmin: user?.perfil === 'ADMIN',
-        isGestor: user?.perfil === 'GESTOR',
         loading,
         login,
         logout,
+        hasPermission,
+        hasAnyPermission,
       }}
     >
       {children}

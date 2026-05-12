@@ -17,145 +17,95 @@ import {
   FiClipboard,
   FiCreditCard,
   FiBarChart2,
-  FiTrendingUp, 
-  FiShoppingBag
+  FiTrendingUp,
+  FiShoppingBag,
+  FiShield,
+  FiUserCheck,
+  FiKey,
 } from "react-icons/fi";
+
+import { useAuth } from "../contexts/AuthContext";
 
 export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { hasPermission } = useAuth();
 
   const [openCadastro, setOpenCadastro] = useState(true);
   const [openEstoque, setOpenEstoque] = useState(true);
   const [openMovimentacao, setOpenMovimentacao] = useState(true);
   const [openFinanceiro, setOpenFinanceiro] = useState(true);
+  const [openControleAcesso, setOpenControleAcesso] = useState(true);
 
   function isActive(path: string) {
     if (path === "/") return location.pathname === "/";
-    return (
-      location.pathname === path || location.pathname.startsWith(path + "/")
-    );
+    return location.pathname === path || location.pathname.startsWith(path + "/");
   }
 
-  const cadastroItems = [
-    {
-      path: "/empresas",
-      label: "Empresas",
-      icon: <FiBriefcase size={16} />,
-    },
-    {
-      path: "/orgaos",
-      label: "Órgãos",
-      icon: <FiUsers size={16} />,
-    },
-    {
-      path: "/fornecedores",
-      label: "Fornecedores",
-      icon: <FiUsers size={16} />,
-    },
-    {
-      path: "/produtos",
-      label: "Produtos",
-      icon: <FiBox size={16} />,
-    },
-    {
-      path: "/grupos",
-      label: "Grupo de produtos",
-      icon: <FiLayers size={16} />,
-    },
-    {
-      path: "/subgrupos",
-      label: "Subgrupo de produtos",
-      icon: <FiGrid size={16} />,
-    },
-    {
-      path: "/formas-pagamento",
-      label: "Formas de pagamento",
-      icon: <FiCreditCard size={16} />,
-    },
-  ];
+  const dashboardVisible = hasPermission("DASHBOARD_VISUALIZAR");
 
-  const estoqueItems = [
-    {
-      path: "/estoque",
-      label: "Posição de estoque",
-      icon: <FiArchive size={16} />,
-    },
-    {
-      path: "/estoque/movimentacoes",
-      label: "Movimentações",
-      icon: <FiActivity size={16} />,
-    },
-    {
-      path: "/estoque/lotes",
-      label: "Estoque por lote",
-      icon: <FiBox size={16} />,
-    },
-    {
-      path: "/estoque/inventario",
-      label: "Inventário",
-      icon: <FiClipboard size={16} />,
-    },
-  ];
+  const cadastroItems = [
+    { path: "/empresas", label: "Empresas", icon: <FiBriefcase size={16} />, permission: "EMPRESA_LISTAR" },
+    { path: "/orgaos", label: "Órgãos", icon: <FiUsers size={16} />, permission: "ORGAO_LISTAR" },
+    { path: "/fornecedores", label: "Fornecedores", icon: <FiUsers size={16} />, permission: "FORNECEDOR_LISTAR" },
+    { path: "/produtos", label: "Produtos", icon: <FiBox size={16} />, permission: "PRODUTO_LISTAR" },
+    { path: "/grupos", label: "Grupo de produtos", icon: <FiLayers size={16} />, permission: "GRUPO_PRODUTO_LISTAR" },
+    { path: "/subgrupos", label: "Subgrupo de produtos", icon: <FiGrid size={16} />, permission: "SUBGRUPO_PRODUTO_LISTAR" },
+    { path: "/formas-pagamento", label: "Formas de pagamento", icon: <FiCreditCard size={16} />, permission: "FORMA_PAGAMENTO_LISTAR" },
+  ].filter((item) => hasPermission(item.permission));
 
   const movimentacaoItems = [
-    {
-      path: "/contratos",
-      label: "Contratos",
-      icon: <FiFileText size={16} />,
-    },
-    {
-      path: "/pedidosvenda",
-      label: "Vendas",
-      icon: <FiTrendingUp size={16} />,
-    },
-    {
-      path: "/compras",
-      label: "Compras",
-      icon: <FiShoppingBag size={16} />,
-    },
-  ];
+    { path: "/contratos", label: "Contratos", icon: <FiFileText size={16} />, permission: "CONTRATO_LISTAR" },
+    { path: "/pedidosvenda", label: "Vendas de Contrato", icon: <FiTrendingUp size={16} />, permission: "PEDIDO_VENDA_LISTAR" },
+    { path: "/compras", label: "Compras", icon: <FiShoppingBag size={16} />, permission: "COMPRA_LISTAR" },
+  ].filter((item) => hasPermission(item.permission));
 
   const financeiroItems = [
-    {
-      path: "/contas-pagar",
-      label: "Contas a Pagar",
-      icon: <FiCreditCard size={16} />,
-    },
-    {
-      path: "/dashboard-financeiro",
-      label: "Dashboard Financeiro",
-      icon: <FiBarChart2 size={16} />,
-    },
-  ];
+    { path: "/contas-pagar", label: "Contas a Pagar", icon: <FiCreditCard size={16} />, permission: "CONTA_PAGAR_LISTAR" },
+    { path: "/dashboard-financeiro", label: "Dashboard Financeiro", icon: <FiBarChart2 size={16} />, permission: "DASHBOARD_FINANCEIRO_VISUALIZAR" },
+  ].filter((item) => hasPermission(item.permission));
+
+  const estoqueItems = [
+    { path: "/estoque", label: "Posição de estoque", icon: <FiArchive size={16} />, permission: "ESTOQUE_LISTAR" },
+    { path: "/estoque/movimentacoes", label: "Movimentações", icon: <FiActivity size={16} />, permission: "ESTOQUE_MOVIMENTACAO_LISTAR" },
+    { path: "/estoque/lotes", label: "Estoque por lote", icon: <FiBox size={16} />, permission: "ESTOQUE_LOTE_LISTAR" },
+    { path: "/estoque/inventario", label: "Inventário", icon: <FiClipboard size={16} />, permission: "INVENTARIO_LISTAR" },
+  ].filter((item) => hasPermission(item.permission));
+
+  const controleAcessoItems = [
+    { path: "/controle-acesso/acoes-sistema", label: "Ações do sistema", icon: <FiKey size={16} />, permission: "ACAO_SISTEMA_LISTAR" },
+    { path: "/controle-acesso/grupos-usuarios", label: "Grupos de usuários", icon: <FiShield size={16} />, permission: "GRUPO_USUARIO_LISTAR" },
+    { path: "/controle-acesso/usuarios", label: "Usuários", icon: <FiUserCheck size={16} />, permission: "USUARIO_LISTAR" },
+  ].filter((item) => hasPermission(item.permission));
 
   const cadastrosActive = useMemo(
     () => cadastroItems.some((item) => isActive(item.path)),
-    [location.pathname]
-  );
-
-  const estoqueActive = useMemo(
-    () => estoqueItems.some((item) => isActive(item.path)),
-    [location.pathname]
+    [location.pathname, cadastroItems]
   );
 
   const movimentacaoActive = useMemo(
     () => movimentacaoItems.some((item) => isActive(item.path)),
-    [location.pathname]
+    [location.pathname, movimentacaoItems]
   );
 
   const financeiroActive = useMemo(
     () => financeiroItems.some((item) => isActive(item.path)),
-    [location.pathname]
+    [location.pathname, financeiroItems]
+  );
+
+  const estoqueActive = useMemo(
+    () => estoqueItems.some((item) => isActive(item.path)),
+    [location.pathname, estoqueItems]
+  );
+
+  const controleAcessoActive = useMemo(
+    () => controleAcessoItems.some((item) => isActive(item.path)),
+    [location.pathname, controleAcessoItems]
   );
 
   useEffect(() => {
     if (cadastrosActive) setOpenCadastro(true);
   }, [cadastrosActive]);
-
-  useEffect(() => {
-    if (estoqueActive) setOpenEstoque(true);
-  }, [estoqueActive]);
 
   useEffect(() => {
     if (movimentacaoActive) setOpenMovimentacao(true);
@@ -165,13 +115,20 @@ export default function Sidebar() {
     if (financeiroActive) setOpenFinanceiro(true);
   }, [financeiroActive]);
 
+  useEffect(() => {
+    if (estoqueActive) setOpenEstoque(true);
+  }, [estoqueActive]);
+
+  useEffect(() => {
+    if (controleAcessoActive) setOpenControleAcesso(true);
+  }, [controleAcessoActive]);
+
   const styles = {
     aside: {
       width: 280,
       minWidth: 280,
       height: "100vh",
-      background:
-        "linear-gradient(180deg, #0f172a 0%, #111827 45%, #0b1220 100%)",
+      background: "linear-gradient(180deg, #0f172a 0%, #111827 45%, #0b1220 100%)",
       color: "#e5e7eb",
       display: "flex",
       flexDirection: "column" as const,
@@ -182,7 +139,6 @@ export default function Sidebar() {
       top: 0,
       overflowY: "auto" as const,
     },
-
     brandWrap: {
       display: "flex",
       alignItems: "center",
@@ -191,13 +147,11 @@ export default function Sidebar() {
       marginBottom: 8,
       borderBottom: "1px solid rgba(255,255,255,0.06)",
     },
-
     brandIcon: {
       width: 42,
       height: 42,
       borderRadius: 14,
-      background:
-        "linear-gradient(135deg, #3b82f6 0%, #2563eb 45%, #1d4ed8 100%)",
+      background: "linear-gradient(135deg, #3b82f6 0%, #2563eb 45%, #1d4ed8 100%)",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
@@ -207,13 +161,11 @@ export default function Sidebar() {
       boxShadow: "0 10px 24px rgba(37, 99, 235, 0.28)",
       flexShrink: 0,
     },
-
     brandTextWrap: {
       display: "flex",
       flexDirection: "column" as const,
       minWidth: 0,
     },
-
     brandTitle: {
       fontSize: 17,
       fontWeight: 700,
@@ -221,14 +173,12 @@ export default function Sidebar() {
       lineHeight: 1.1,
       letterSpacing: 0.2,
     },
-
     brandSubtitle: {
       fontSize: 12,
       color: "rgba(226,232,240,0.68)",
       marginTop: 4,
       lineHeight: 1.2,
     },
-
     sectionLabel: {
       fontSize: 11,
       fontWeight: 700,
@@ -237,7 +187,6 @@ export default function Sidebar() {
       color: "rgba(148,163,184,0.8)",
       padding: "16px 10px 8px",
     },
-
     menuItem: {
       display: "flex",
       alignItems: "center",
@@ -253,15 +202,12 @@ export default function Sidebar() {
       marginBottom: 6,
       border: "1px solid transparent",
     },
-
     activeItem: {
-      background:
-        "linear-gradient(90deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))",
+      background: "linear-gradient(90deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))",
       border: "1px solid rgba(59,130,246,0.28)",
       color: "#ffffff",
       boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.02)",
     },
-
     iconWrap: {
       width: 18,
       display: "flex",
@@ -269,7 +215,6 @@ export default function Sidebar() {
       justifyContent: "center",
       flexShrink: 0,
     },
-
     submenu: {
       position: "relative" as const,
       margin: "4px 0 10px 0",
@@ -277,7 +222,6 @@ export default function Sidebar() {
       marginLeft: 12,
       borderLeft: "1px solid rgba(148,163,184,0.18)",
     },
-
     submenuItem: {
       display: "flex",
       alignItems: "center",
@@ -293,13 +237,11 @@ export default function Sidebar() {
       marginBottom: 4,
       border: "1px solid transparent",
     },
-
     activeSubItem: {
       background: "rgba(59,130,246,0.12)",
       border: "1px solid rgba(59,130,246,0.22)",
       color: "#ffffff",
     },
-
     footer: {
       marginTop: "auto",
       padding: "14px 10px 4px",
@@ -325,34 +267,11 @@ export default function Sidebar() {
       e.currentTarget.style.transform = "translateX(0)";
     };
 
-  const renderItem = (
-    path: string,
-    label: string,
-    icon: React.ReactNode,
-    onClick?: () => void
-  ) => {
-    const active = isActive(path);
-
-    return (
-      <div
-        style={{
-          ...styles.menuItem,
-          ...(active ? styles.activeItem : {}),
-        }}
-        onMouseEnter={handleMouseEnter(active)}
-        onMouseLeave={handleMouseLeave(active)}
-        onClick={onClick ?? (() => navigate(path))}
-      >
-        <span style={styles.iconWrap}>{icon}</span>
-        <span style={{ flex: 1 }}>{label}</span>
-      </div>
-    );
-  };
-
   const renderSubItem = (item: {
     path: string;
     label: string;
     icon: React.ReactNode;
+    permission: string;
   }) => {
     const active = isActive(item.path);
 
@@ -366,11 +285,55 @@ export default function Sidebar() {
         onMouseEnter={handleMouseEnter(active)}
         onMouseLeave={handleMouseLeave(active)}
         onClick={() => navigate(item.path)}
-        title={item.label}
       >
         <span style={styles.iconWrap}>{item.icon}</span>
         <span style={{ flex: 1 }}>{item.label}</span>
       </div>
+    );
+  };
+
+  const renderGroup = ({
+    visible,
+    active,
+    open,
+    setOpen,
+    icon,
+    label,
+    items,
+  }: {
+    visible: boolean;
+    active: boolean;
+    open: boolean;
+    setOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    icon: React.ReactNode;
+    label: string;
+    items: Array<{
+      path: string;
+      label: string;
+      icon: React.ReactNode;
+      permission: string;
+    }>;
+  }) => {
+    if (!visible) return null;
+
+    return (
+      <>
+        <div
+          style={{
+            ...styles.menuItem,
+            ...(active ? styles.activeItem : {}),
+          }}
+          onMouseEnter={handleMouseEnter(active)}
+          onMouseLeave={handleMouseLeave(active)}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span style={styles.iconWrap}>{icon}</span>
+          <span style={{ flex: 1 }}>{label}</span>
+          {open ? <FiChevronUp size={16} /> : <FiChevronDown size={16} />}
+        </div>
+
+        {open && <div style={styles.submenu}>{items.map(renderSubItem)}</div>}
+      </>
     );
   };
 
@@ -381,108 +344,88 @@ export default function Sidebar() {
 
         <div style={styles.brandTextWrap}>
           <div style={styles.brandTitle}>SisContratos</div>
-          <div style={styles.brandSubtitle}>
-            Gestão comercial e contratual
+          <div style={styles.brandSubtitle}>Gestão comercial e contratual</div>
+        </div>
+      </div>
+
+      {dashboardVisible && (
+        <>
+          <div style={styles.sectionLabel}>Visão geral</div>
+
+          <div
+            style={{
+              ...styles.menuItem,
+              ...(isActive("/") ? styles.activeItem : {}),
+            }}
+            onMouseEnter={handleMouseEnter(isActive("/"))}
+            onMouseLeave={handleMouseLeave(isActive("/"))}
+            onClick={() => navigate("/")}
+          >
+            <span style={styles.iconWrap}>
+              <FiHome size={18} />
+            </span>
+            <span style={{ flex: 1 }}>Dashboard</span>
           </div>
-        </div>
-      </div>
-
-      <div style={styles.sectionLabel}>Visão geral</div>
-      {renderItem("/", "Dashboard", <FiHome size={18} />)}
-
-      <div style={styles.sectionLabel}>Gestão</div>
-
-      <div
-        style={{
-          ...styles.menuItem,
-          ...(cadastrosActive ? styles.activeItem : {}),
-        }}
-        onMouseEnter={handleMouseEnter(cadastrosActive)}
-        onMouseLeave={handleMouseLeave(cadastrosActive)}
-        onClick={() => setOpenCadastro((v) => !v)}
-      >
-        <span style={styles.iconWrap}>
-          <FiFolder size={18} />
-        </span>
-        <span style={{ flex: 1 }}>Cadastros</span>
-        {openCadastro ? <FiChevronUp size={16} /> : <FiChevronDown size={16} />}
-      </div>
-
-      {openCadastro && (
-        <div style={styles.submenu}>{cadastroItems.map(renderSubItem)}</div>
+        </>
       )}
 
-      <div
-        style={{
-          ...styles.menuItem,
-          ...(movimentacaoActive ? styles.activeItem : {}),
-        }}
-        onMouseEnter={handleMouseEnter(movimentacaoActive)}
-        onMouseLeave={handleMouseLeave(movimentacaoActive)}
-        onClick={() => setOpenMovimentacao((v) => !v)}
-      >
-        <span style={styles.iconWrap}>
-          <FiShoppingCart size={18} />
-        </span>
-        <span style={{ flex: 1 }}>Movimentação</span>
-        {openMovimentacao ? (
-          <FiChevronUp size={16} />
-        ) : (
-          <FiChevronDown size={16} />
+      {(cadastroItems.length > 0 ||
+        movimentacaoItems.length > 0 ||
+        financeiroItems.length > 0 ||
+        estoqueItems.length > 0 ||
+        controleAcessoItems.length > 0) && (
+          <div style={styles.sectionLabel}>Gestão</div>
         )}
-      </div>
 
-      {openMovimentacao && (
-        <div style={styles.submenu}>
-          {movimentacaoItems.map(renderSubItem)}
-        </div>
-      )}
+      {renderGroup({
+        visible: cadastroItems.length > 0,
+        active: cadastrosActive,
+        open: openCadastro,
+        setOpen: setOpenCadastro,
+        icon: <FiFolder size={18} />,
+        label: "Cadastros",
+        items: cadastroItems,
+      })}
 
-      <div
-        style={{
-          ...styles.menuItem,
-          ...(financeiroActive ? styles.activeItem : {}),
-        }}
-        onMouseEnter={handleMouseEnter(financeiroActive)}
-        onMouseLeave={handleMouseLeave(financeiroActive)}
-        onClick={() => setOpenFinanceiro((v) => !v)}
-      >
-        <span style={styles.iconWrap}>
-          <FiCreditCard size={18} />
-        </span>
-        <span style={{ flex: 1 }}>Financeiro</span>
-        {openFinanceiro ? (
-          <FiChevronUp size={16} />
-        ) : (
-          <FiChevronDown size={16} />
-        )}
-      </div>
+      {renderGroup({
+        visible: movimentacaoItems.length > 0,
+        active: movimentacaoActive,
+        open: openMovimentacao,
+        setOpen: setOpenMovimentacao,
+        icon: <FiShoppingCart size={18} />,
+        label: "Movimentação",
+        items: movimentacaoItems,
+      })}
 
-      {openFinanceiro && (
-        <div style={styles.submenu}>{financeiroItems.map(renderSubItem)}</div>
-      )}
+      {renderGroup({
+        visible: financeiroItems.length > 0,
+        active: financeiroActive,
+        open: openFinanceiro,
+        setOpen: setOpenFinanceiro,
+        icon: <FiCreditCard size={18} />,
+        label: "Financeiro",
+        items: financeiroItems,
+      })}
 
-      <div
-        style={{
-          ...styles.menuItem,
-          ...(estoqueActive ? styles.activeItem : {}),
-        }}
-        onMouseEnter={handleMouseEnter(estoqueActive)}
-        onMouseLeave={handleMouseLeave(estoqueActive)}
-        onClick={() => setOpenEstoque((v) => !v)}
-      >
-        <span style={styles.iconWrap}>
-          <FiArchive size={18} />
-        </span>
-        <span style={{ flex: 1 }}>Estoque</span>
-        {openEstoque ? <FiChevronUp size={16} /> : <FiChevronDown size={16} />}
-      </div>
-
-      {openEstoque && (
-        <div style={styles.submenu}>{estoqueItems.map(renderSubItem)}</div>
-      )}
-
+      {renderGroup({
+        visible: estoqueItems.length > 0,
+        active: estoqueActive,
+        open: openEstoque,
+        setOpen: setOpenEstoque,
+        icon: <FiArchive size={18} />,
+        label: "Estoque",
+        items: estoqueItems,
+      })}
       <div style={styles.footer}>Ambiente administrativo</div>
+      {renderGroup({
+        visible: controleAcessoItems.length > 0,
+        active: controleAcessoActive,
+        open: openControleAcesso,
+        setOpen: setOpenControleAcesso,
+        icon: <FiShield size={18} />,
+        label: "Controle de Acesso",
+        items: controleAcessoItems,
+      })}
     </aside>
   );
 }

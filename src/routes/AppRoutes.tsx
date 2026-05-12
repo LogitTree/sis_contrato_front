@@ -49,6 +49,10 @@ import FormaPagamentoCreate from "../pages/FormasPagamento/Create";
 import FormaPagamentoEdit from "../pages/FormasPagamento/Edit";
 import ContasPagarDetail from "../pages/ContasPagar/Detail";
 import DashboardFinanceiro from "../pages/DashboardFinanceiro";
+import AcoesSistemaPage from "../pages/controleacesso/acoes-sistema/AcoesSistemaPage";
+import GruposUsuariosPage from "../pages/controleacesso/grupos-usuarios/GruposUsuariosPage";
+import PermissoesGrupoPage from "../pages/controleacesso/grupos-usuarios/permissoes/PermissoesGrupoPage";
+import UsuariosPage from "../pages/controleacesso/usuarios/UsuariosPage";
 
 export default function AppRoutes() {
   return (
@@ -122,6 +126,23 @@ export default function AppRoutes() {
               <Route path="/contas-pagar/:id" element={<ContasPagarDetail />} />
 
               <Route path="/dashboard-financeiro" element={<DashboardFinanceiro />} />
+
+              <Route
+                path="/controle-acesso/acoes-sistema"
+                element={<AcoesSistemaPage />}
+              />
+              <Route
+                path="/controle-acesso/grupos-usuarios"
+                element={<GruposUsuariosPage />}
+              />
+              <Route
+                path="/controle-acesso/grupos-usuarios/:id/permissoes"
+                element={<PermissoesGrupoPage />}
+              />
+              <Route
+                path="/controle-acesso/usuarios"
+                element={<UsuariosPage />}
+              />
             </Route>
           </Route>
 

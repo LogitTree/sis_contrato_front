@@ -433,7 +433,7 @@ export default function Dashboard() {
           >
             <div style={{ fontSize: 13, fontWeight: 900, color: "#0f172a" }}>
               {user?.nome || "—"}
-              {user?.perfil ? (
+              {user?.grupo?.descricao ? (
                 <span
                   style={{
                     marginLeft: 8,
@@ -446,7 +446,7 @@ export default function Dashboard() {
                     color: "#334155",
                   }}
                 >
-                  {user.perfil}
+                  {user.grupo.descricao}
                 </span>
               ) : null}
             </div>
