@@ -92,6 +92,7 @@ export async function listarPedidosVenda(filters: PedidoVendaFilters) {
     order: filters.orderDir,
     orderBy: filters.orderBy,
     orderDir: filters.orderDir,
+    tipo_venda: "CONTRATO",
   };
 
   if (filters.contrato_id) params.contrato_id = filters.contrato_id;
