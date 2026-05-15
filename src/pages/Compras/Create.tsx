@@ -1,880 +1,779 @@
 // src/pages/Compras/Create.tsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import api from "../../api/api";
-import { useNavigate } from "react-router-dom";
-import { toast } from "react-toastify";
 
-import { layoutStyles } from "../../styles/layout";
+import { useNavigate } from "react-router-dom";
+import { FiPlus, FiSave, FiTrash2 } from "react-icons/fi";
+
+import PageShell from "../../components/executive/PageShell";
+import PageHeader from "../../components/executive/PageHeader";
+import SummaryCard from "../../components/executive/SummaryCard";
+import DataCard from "../../components/executive/DataCard";
+
 import { buttonStyles } from "../../styles/buttons";
-import { tableStyles } from "../../styles/table";
 import { filterStyles } from "../../styles/filters";
 
-import { FiTrash2 } from "react-icons/fi";
+import {
+  compraCreateUtils,
+  useCompraCreate,
+} from "./hooks/useCompraCreate";
 
-type FornecedorOption = { id: number; nome: string };
-type ProdutoOption = { id: number; nome: string };
-
-type CompraItem = {
-  id: number;
-  compra_id: number;
-  produto_id: number;
-  qtd: string;
-  preco_unitario: string;
-  recebido_qtd?: string;
-  previsao_entrega?: string | null;
-
-  produto?: { nome?: string };
-};
-
-const LS_DRAFT_KEY = "compra_create_draft_v1";
-
-/** Converte strings BR/US para número */
-function toNumberAny(v: any): number {
-  if (v === null || v === undefined) return 0;
-  const s = String(v).trim();
-  if (!s) return 0;
-
-  const hasComma = s.includes(",");
-  const hasDot = s.includes(".");
-
-  if (hasComma && hasDot) {
-    const normalized = s.replace(/\./g, "").replace(",", ".");
-    const n = Number(normalized);
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  if (hasComma) {
-    const n = Number(s.replace(",", "."));
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  const n = Number(s);
-  return Number.isFinite(n) ? n : 0;
+function formatMoneyBR(v: any) {
+  return compraCreateUtils.moneyFromApi(v).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
 }
 
-function formatMoneyBR(n: number) {
-  return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function formatQtyBR(v: any) {
+  return compraCreateUtils.toNumberAny(v).toLocaleString("pt-BR", {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  });
 }
 
-function formatQtyBR(n: number) {
-  return n.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-}
-
-/** permite digitar decimal com vírgula/ponto, mas guarda normalizado */
-function normalizeDecimalString(v: string) {
-  const clean = (v || "").replace(/[^\d.,]/g, "");
-  const hasComma = clean.includes(",");
-  const hasDot = clean.includes(".");
-  if (hasComma && hasDot) return clean.replace(/\./g, "").replace(",", ".");
-  if (hasComma) return clean.replace(",", ".");
-  return clean;
-}
-
-export default function ComprasCreate() {
+export default function CompraCreate() {
   const navigate = useNavigate();
 
-  const [loading, setLoading] = useState(true);
-  const [savingHeader, setSavingHeader] = useState(false);
-  const [savingItem, setSavingItem] = useState(false);
-  const [removingItemId, setRemovingItemId] = useState<number | null>(null);
+  const {
+    qtdRef,
 
-  // ===== combos =====
-  const [fornecedores, setFornecedores] = useState<FornecedorOption[]>([]);
-  const [produtos, setProdutos] = useState<ProdutoOption[]>([]);
-  const produtosMap = useMemo(() => new Map(produtos.map((p) => [p.id, p])), [produtos]);
+    loading,
+    savingHeader,
+    savingItem,
+    removingItemId,
 
-  // ===== header form =====
-  const [fornecedorId, setFornecedorId] = useState("");
-  const [dataPedido, setDataPedido] = useState(() => new Date().toISOString().slice(0, 10));
-  const [observacao, setObservacao] = useState("");
+    fornecedores,
+    produtos,
 
-  // ✅ novos campos (backend)
-  const [numeroNF, setNumeroNF] = useState("");
-  const [serieNF, setSerieNF] = useState("");
-  const [dataEmissaoNF, setDataEmissaoNF] = useState("");
-  const [chaveNfe, setChaveNfe] = useState("");
-
-  const [valorFrete, setValorFrete] = useState("");
-  const [valorDesconto, setValorDesconto] = useState("");
-
-  const [formaPagamento, setFormaPagamento] = useState("");
-  const [condicaoPagamento, setCondicaoPagamento] = useState("");
-  const [dataVencimento, setDataVencimento] = useState("");
-
-  // ===== compra criada =====
-  const [compraId, setCompraId] = useState<number | null>(null);
-  const [itens, setItens] = useState<CompraItem[]>([]);
-
-  // ===== item form =====
-  const [produtoId, setProdutoId] = useState("");
-  const [qtd, setQtd] = useState("");
-  const [precoUnit, setPrecoUnit] = useState("");
-  const [previsaoEntrega, setPrevisaoEntrega] = useState("");
-
-  const qtdRef = useRef<HTMLInputElement | null>(null);
-
-  // antes: minHeight: 42, marginTop: 8, lineClamp: 3
-  const helperLineStyle: React.CSSProperties = {
-    marginTop: 6,
-    fontSize: 12,
-    color: "#64748b",
-    minHeight: 0,        // 👈 bem menor
-    lineHeight: "16px",
-    overflow: "hidden",
-    display: "-webkit-box",
-    WebkitBoxOrient: "vertical" as any,
-    WebkitLineClamp: 1 as any, // 👈 2 linhas já resolve
-  };
-
-  const headerStackStyle: React.CSSProperties = {
-    display: "flex",
-    flexDirection: "column",
-    gap: 0,            // 👈 antes 16
-    width: "100%",
-  };
-
-  const headerRowStyle: React.CSSProperties = {
-    display: "flex",
-    gap: 0,            // 👈 antes 16
-    width: "100%",
-    alignItems: "flex-end",
-    flexWrap: "wrap",
-  };
-
-  const sectionTitleStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingBottom: 12,
-    marginBottom: 10,
-    borderBottom: "1px solid #eef2f7",
-  };
-
-  const sectionLabelStyle: React.CSSProperties = {
-    fontSize: 14,
-    fontWeight: 800,
-    color: "#0f172a",
-  };
-
-  const sectionHintStyle: React.CSSProperties = {
-    fontSize: 12,
-    color: "#64748b",
-    fontWeight: 600,
-  };
-
-  async function loadCombos() {
-    try {
-      const [resForn, resProd] = await Promise.all([
-        api.get("/fornecedores", { params: { page: 1, limit: 1000 } }),
-        api.get("/produtos", { params: { page: 1, limit: 2000 } }),
-      ]);
-
-      const fornList = resForn.data?.data ?? resForn.data?.rows ?? resForn.data?.items ?? [];
-      const prodList = resProd.data?.data ?? resProd.data?.rows ?? resProd.data?.items ?? [];
-
-      setFornecedores(
-        (Array.isArray(fornList) ? fornList : []).map((f: any) => ({
-          id: Number(f.id),
-          nome: f.nome ?? f.razao_social ?? f.nome_fantasia ?? `Fornecedor #${f.id}`,
-        }))
-      );
-
-      setProdutos(
-        (Array.isArray(prodList) ? prodList : []).map((p: any) => ({
-          id: Number(p.id),
-          nome: p.nome ?? p.descricao ?? `Produto #${p.id}`,
-        }))
-      );
-    } catch (err) {
-      console.error(err);
-      toast.error("Erro ao carregar fornecedores/produtos");
-      setFornecedores([]);
-      setProdutos([]);
-    }
-  }
-
-  async function loadCompra(id: number) {
-    try {
-      const res = await api.get(`/compras/${id}`);
-      const compra = res.data?.data ?? res.data ?? {};
-      const lista =
-        compra?.itens ??
-        compra?.CompraItems ??
-        compra?.compra_itens ??
-        compra?.items ??
-        res.data?.itens ??
-        [];
-      setItens(Array.isArray(lista) ? lista : []);
-    } catch (err) {
-      console.error(err);
-      toast.error("Erro ao carregar itens da compra");
-    }
-  }
-
-  // restore draft (se ainda não salvou)
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(LS_DRAFT_KEY);
-      if (!raw) return;
-      const draft = JSON.parse(raw);
-      if (!draft) return;
-      if (!compraId) {
-        if (draft.fornecedorId) setFornecedorId(String(draft.fornecedorId));
-        if (draft.dataPedido) setDataPedido(String(draft.dataPedido));
-        if (draft.observacao !== undefined) setObservacao(String(draft.observacao ?? ""));
-
-        // novos campos
-        if (draft.numeroNF !== undefined) setNumeroNF(String(draft.numeroNF ?? ""));
-        if (draft.serieNF !== undefined) setSerieNF(String(draft.serieNF ?? ""));
-        if (draft.dataEmissaoNF !== undefined) setDataEmissaoNF(String(draft.dataEmissaoNF ?? ""));
-        if (draft.chaveNfe !== undefined) setChaveNfe(String(draft.chaveNfe ?? ""));
-        if (draft.valorFrete !== undefined) setValorFrete(String(draft.valorFrete ?? ""));
-        if (draft.valorDesconto !== undefined) setValorDesconto(String(draft.valorDesconto ?? ""));
-        if (draft.formaPagamento !== undefined) setFormaPagamento(String(draft.formaPagamento ?? ""));
-        if (draft.condicaoPagamento !== undefined) setCondicaoPagamento(String(draft.condicaoPagamento ?? ""));
-        if (draft.dataVencimento !== undefined) setDataVencimento(String(draft.dataVencimento ?? ""));
-      }
-    } catch { }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // salva draft enquanto não criou
-  useEffect(() => {
-    if (compraId) return;
-    try {
-      localStorage.setItem(
-        LS_DRAFT_KEY,
-        JSON.stringify({
-          fornecedorId,
-          dataPedido,
-          observacao,
-          numeroNF,
-          serieNF,
-          dataEmissaoNF,
-          chaveNfe,
-          valorFrete,
-          valorDesconto,
-          formaPagamento,
-          condicaoPagamento,
-          dataVencimento,
-        })
-      );
-    } catch { }
-  }, [
-    fornecedorId,
-    dataPedido,
-    observacao,
-    numeroNF,
-    serieNF,
-    dataEmissaoNF,
-    chaveNfe,
-    valorFrete,
-    valorDesconto,
-    formaPagamento,
-    condicaoPagamento,
-    dataVencimento,
     compraId,
-  ]);
+    itens,
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      await loadCombos();
-      setLoading(false);
-    })();
-  }, []);
+    fornecedorId,
+    setFornecedorId,
+    dataPedido,
+    setDataPedido,
+    observacao,
+    setObservacao,
 
-  const fornecedorSelecionado = useMemo(() => {
-    const id = Number(fornecedorId);
-    if (!id) return null;
-    return fornecedores.find((f) => f.id === id) ?? null;
-  }, [fornecedorId, fornecedores]);
+    numeroNF,
+    setNumeroNF,
+    serieNF,
+    setSerieNF,
+    dataEmissaoNF,
+    setDataEmissaoNF,
+    chaveNfe,
+    setChaveNfe,
 
-  const produtoSelecionado = useMemo(() => {
-    const id = Number(produtoId);
-    if (!id) return null;
-    return produtosMap.get(id) ?? null;
-  }, [produtoId, produtosMap]);
+    valorFrete,
+    setValorFrete,
+    valorDesconto,
+    setValorDesconto,
 
-  // foca qtd ao escolher produto
-  useEffect(() => {
-    if (!produtoId) return;
-    setTimeout(() => qtdRef.current?.focus(), 60);
-  }, [produtoId]);
+    formaPagamento,
+    setFormaPagamento,
+    condicaoPagamento,
+    setCondicaoPagamento,
+    dataVencimento,
+    setDataVencimento,
 
-  // totais
-  const totais = useMemo(() => {
-    const totalItens = itens.length;
-    const totalQtd = itens.reduce((acc, it) => acc + toNumberAny(it.qtd), 0);
-    const totalValor = itens.reduce((acc, it) => {
-      const q = toNumberAny(it.qtd);
-      const p = toNumberAny(it.preco_unitario);
-      return acc + q * p;
-    }, 0);
+    produtoId,
+    setProdutoId,
+    qtd,
+    setQtd,
+    precoUnit,
+    setPrecoUnit,
+    previsaoEntrega,
+    setPrevisaoEntrega,
 
-    const frete = toNumberAny(valorFrete);
-    const desconto = toNumberAny(valorDesconto);
-    const totalFinal = totalValor + frete - desconto;
+    fornecedorSelecionado,
+    produtoSelecionado,
+    totais,
 
-    return { totalItens, totalQtd, totalValor, frete, desconto, totalFinal };
-  }, [itens, valorFrete, valorDesconto]);
+    disableHeader,
+    disableItem,
+    canInsert,
 
-  async function handleSalvarCabecalho(e: React.FormEvent) {
-    e.preventDefault();
-
-    if (!dataPedido) return toast.error("Informe a data do pedido.");
-
-    setSavingHeader(true);
-    try {
-      const payload = {
-        fornecedor_id: fornecedorId ? Number(fornecedorId) : null,
-        data_pedido: dataPedido,
-        observacao: observacao?.trim() || null,
-
-        // ✅ novos campos
-        numero_nota_fiscal: numeroNF?.trim() || null,
-        serie_nota_fiscal: serieNF?.trim() || null,
-        data_emissao_nf: dataEmissaoNF || null,
-        chave_nfe: chaveNfe?.trim() || null,
-
-        valor_frete: String(toNumberAny(valorFrete)),
-        valor_desconto: String(toNumberAny(valorDesconto)),
-
-        forma_pagamento: formaPagamento?.trim() || null,
-        condicao_pagamento: condicaoPagamento?.trim() || null,
-        data_vencimento: dataVencimento || null,
-      };
-
-      const res = await api.post("/compras", payload);
-
-      const id = res.data?.data?.id ?? res.data?.id ?? res.data?.data?.data?.id ?? null;
-      if (!id) throw new Error("API não retornou o ID da compra");
-
-      setCompraId(Number(id));
-
-      try {
-        localStorage.removeItem(LS_DRAFT_KEY);
-      } catch { }
-
-      toast.success("Compra criada. Agora adicione os itens.");
-      await loadCompra(Number(id));
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.response?.data?.error || err?.message || "Erro ao salvar cabeçalho");
-    } finally {
-      setSavingHeader(false);
-    }
-  }
-
-  async function handleAddItem() {
-    if (!compraId) return toast.error("Salve o cabeçalho da compra primeiro.");
-    if (!produtoId) return toast.error("Selecione um produto.");
-
-    const qtdN = toNumberAny(qtd);
-    const precoN = toNumberAny(precoUnit);
-
-    if (!qtdN || qtdN <= 0) return toast.error("Informe a quantidade.");
-    if (precoN <= 0) return toast.error("Informe um preço unitário maior que zero.");
-
-    setSavingItem(true);
-    try {
-      const payload = {
-        produto_id: Number(produtoId),
-        qtd: String(qtdN),
-        preco_unitario: String(precoN),
-        previsao_entrega: previsaoEntrega ? previsaoEntrega : null,
-      };
-
-      await api.post(`/compras/${compraId}/itens`, payload);
-
-      toast.success("Item inserido");
-
-      setProdutoId("");
-      setQtd("");
-      setPrecoUnit("");
-      setPrevisaoEntrega("");
-
-      await loadCompra(compraId);
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.response?.data?.error || "Erro ao inserir item");
-    } finally {
-      setSavingItem(false);
-    }
-  }
-
-  async function handleRemoveItem(itemId: number) {
-    if (!compraId) return;
-    if (!window.confirm("Remover este item?")) return;
-
-    setRemovingItemId(itemId);
-    try {
-      await api.delete(`/compras/${compraId}/itens/${itemId}`);
-
-      toast.success("Item removido");
-      await loadCompra(compraId);
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.response?.data?.error || "Erro ao remover item");
-    } finally {
-      setRemovingItemId(null);
-    }
-  }
-
-  const disableHeader = loading || savingHeader || !!compraId;
-  const disableItem = loading || savingItem || !compraId;
-
-  const canInsert =
-    !disableItem &&
-    !!produtoId &&
-    !!qtd &&
-    toNumberAny(qtd) > 0 &&
-    precoUnit !== "" &&
-    toNumberAny(precoUnit) > 0;
+    salvarCabecalho,
+    adicionarItem,
+    removerItem,
+  } = useCompraCreate();
 
   return (
-    <div style={layoutStyles.page}>
-      {/* HEADER */}
-      <div style={layoutStyles.header}>
-        <div>
-          <h1 style={layoutStyles.title}>{compraId ? `Compra #${compraId}` : "Nova Compra"}</h1>
-          <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
-            {compraId ? "Cabeçalho criado. Insira os itens abaixo." : "Crie o cabeçalho e depois adicione os itens da compra."}
-          </div>
-        </div>
+    <PageShell>
+      <PageHeader
+        title="Nova Compra"
+        subtitle="Cadastre o cabeçalho da compra e depois inclua os produtos adquiridos."
+        action={
+          <button
+            type="button"
+            style={buttonStyles.secondary}
+            onClick={() => navigate("/compras")}
+          >
+            Voltar
+          </button>
+        }
+      />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gap: 12,
+          marginBottom: 16,
+        }}
+      >
+        <SummaryCard label="Compra" value={compraId ? `#${compraId}` : "Nova"} />
+
+        <SummaryCard label="Itens" value={totais.totalItens} />
+
+        <SummaryCard
+          label="Quantidade"
+          value={formatQtyBR(totais.totalQtd)}
+          tone="info"
+        />
+
+        <SummaryCard
+          label="Total final"
+          value={formatMoneyBR(totais.totalFinal)}
+          tone="success"
+        />
       </div>
 
-      {/* CABEÇALHO */}
-      <div style={layoutStyles.card}>
-        <div style={sectionTitleStyle}>
-          <div style={sectionLabelStyle}>Cabeçalho da Compra</div>
-          <div style={sectionHintStyle}>{compraId ? "Salvo" : "Preencha e salve para liberar os itens"}</div>
-        </div>
+      <DataCard
+        title="Cabeçalho da compra"
+        subtitle={
+          compraId
+            ? "Cabeçalho salvo. Agora você pode adicionar produtos à compra."
+            : "Informe fornecedor, data, documento fiscal e condições comerciais."
+        }
+      >
+        <form onSubmit={salvarCabecalho}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "2fr 1fr 1fr",
+              gap: 12,
+              alignItems: "end",
+            }}
+          >
+            <div>
+              <label style={labelStyle}>Fornecedor</label>
 
-        <form onSubmit={handleSalvarCabecalho}>
-          <div style={layoutStyles.cardCompact}>
-            <div style={headerStackStyle}>
-              {/* linha 1 */}
-              <div style={{ display: "flex", gap: 16, width: "100%", alignItems: "flex-end", flexWrap: "wrap" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 320 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Fornecedor</label>
+              <select
+                value={fornecedorId}
+                onChange={(e) => setFornecedorId(e.target.value)}
+                disabled={disableHeader}
+                style={fieldStyle}
+              >
+                <option value="">
+                  {loading ? "Carregando fornecedores..." : "Selecione"}
+                </option>
 
-                  <select
-                    value={fornecedorId}
-                    onChange={(e) => setFornecedorId(e.target.value)}
-                    style={{ ...filterStyles.select, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
-                    disabled={disableHeader}
-                  >
-                    <option value="">Selecione...</option>
-                    {fornecedores.map((f) => (
-                      <option key={f.id} value={String(f.id)}>
-                        {f.nome}
-                      </option>
-                    ))}
-                  </select>
+                {fornecedores.map((fornecedor) => (
+                  <option key={fornecedor.id} value={fornecedor.id}>
+                    {fornecedor.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-                  <div style={helperLineStyle}>
-                    {fornecedorSelecionado ? (
-                      <>
-                        <span style={{ color: "#9ca3af" }}>Fornecedor selecionado: </span>
-                        {fornecedorSelecionado.nome}
-                      </>
-                    ) : (
-                      "\u00A0"
-                    )}
-                  </div>
-                </div>
+            <div>
+              <label style={labelStyle}>Data do pedido</label>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Data do Pedido</label>
+              <input
+                type="date"
+                value={dataPedido}
+                onChange={(e) => setDataPedido(e.target.value)}
+                disabled={disableHeader}
+                style={fieldStyle}
+              />
+            </div>
 
-                  <input
-                    type="date"
-                    value={dataPedido}
-                    onChange={(e) => setDataPedido(e.target.value)}
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
-                    disabled={disableHeader}
-                  />
+            <div>
+              <label style={labelStyle}>Vencimento</label>
 
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-              </div>
-
-              {/* linha 2 - NF */}
-              <div style={headerRowStyle}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Número NF</label>
-                  <input
-                    value={numeroNF}
-                    onChange={(e) => setNumeroNF(e.target.value)}
-                    placeholder="Ex: 12345"
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
-                  />
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 180 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Série NF</label>
-                  <input
-                    value={serieNF}
-                    onChange={(e) => setSerieNF(e.target.value)}
-                    placeholder="Ex: 1"
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
-                  />
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Data Emissão NF</label>
-                  <input
-                    type="date"
-                    value={dataEmissaoNF}
-                    onChange={(e) => setDataEmissaoNF(e.target.value)}
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
-                  />
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 320 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Chave NFe</label>
-                  <input
-                    value={chaveNfe}
-                    onChange={(e) => setChaveNfe(e.target.value)}
-                    placeholder="44 dígitos (opcional)"
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
-                  />
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-              </div>
-
-              {/* linha 3 - financeiro/pagamento */}
-              <div style={{ display: "flex", gap: 16, width: "100%", alignItems: "flex-end", flexWrap: "wrap" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 200 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Valor Frete</label>
-                  <input
-                    value={valorFrete}
-                    onChange={(e) => setValorFrete(normalizeDecimalString(e.target.value))}
-                    placeholder="0,00"
-                    inputMode="decimal"
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
-                  />
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 200 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Valor Desconto</label>
-                  <input
-                    value={valorDesconto}
-                    onChange={(e) => setValorDesconto(normalizeDecimalString(e.target.value))}
-                    placeholder="0,00"
-                    inputMode="decimal"
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
-                  />
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Forma Pagamento</label>
-                  <input
-                    value={formaPagamento}
-                    onChange={(e) => setFormaPagamento(e.target.value)}
-                    placeholder="Ex: PIX / Cartão / Boleto"
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
-                  />
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 260 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Condição Pagamento</label>
-                  <input
-                    value={condicaoPagamento}
-                    onChange={(e) => setCondicaoPagamento(e.target.value)}
-                    placeholder="Ex: 30/60/90"
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
-                  />
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Data Vencimento</label>
-                  <input
-                    type="date"
-                    value={dataVencimento}
-                    onChange={(e) => setDataVencimento(e.target.value)}
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
-                  />
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-              </div>
-
-              {/* observação */}
-              <div style={{ display: "flex", gap: 16, width: "100%" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Observação</label>
-
-                  <textarea
-                    value={observacao}
-                    onChange={(e) => setObservacao(e.target.value)}
-                    placeholder="Opcional"
-                    style={{ ...filterStyles.input, height: 120, padding: "10px 12px", boxSizing: "border-box", width: "100%", resize: "vertical" }}
-                    disabled={disableHeader}
-                  />
-                </div>
-              </div>
+              <input
+                type="date"
+                value={dataVencimento}
+                onChange={(e) => setDataVencimento(e.target.value)}
+                disabled={disableHeader}
+                style={fieldStyle}
+              />
             </div>
           </div>
 
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
-            <button type="button" style={buttonStyles.link} onClick={() => navigate(-1)} disabled={savingHeader}>
-              Voltar
-            </button>
+          <div
+            style={{
+              marginTop: 12,
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 1fr 2fr",
+              gap: 12,
+              alignItems: "end",
+            }}
+          >
+            <div>
+              <label style={labelStyle}>Nº nota fiscal</label>
 
-            <button type="submit" style={buttonStyles.primary} disabled={disableHeader || !dataPedido}>
-              {savingHeader ? "Salvando..." : compraId ? "Salvo" : "Salvar Cabeçalho"}
-            </button>
+              <input
+                value={numeroNF}
+                onChange={(e) => setNumeroNF(e.target.value)}
+                disabled={disableHeader}
+                placeholder="Ex.: 12345"
+                style={fieldStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Série</label>
+
+              <input
+                value={serieNF}
+                onChange={(e) => setSerieNF(e.target.value)}
+                disabled={disableHeader}
+                placeholder="Ex.: 1"
+                style={fieldStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Emissão NF</label>
+
+              <input
+                type="date"
+                value={dataEmissaoNF}
+                onChange={(e) => setDataEmissaoNF(e.target.value)}
+                disabled={disableHeader}
+                style={fieldStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Chave NFe</label>
+
+              <input
+                value={chaveNfe}
+                onChange={(e) => setChaveNfe(e.target.value)}
+                disabled={disableHeader}
+                placeholder="Chave de acesso da NF-e"
+                style={fieldStyle}
+              />
+            </div>
           </div>
+
+          <div
+            style={{
+              marginTop: 12,
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 1fr 1fr",
+              gap: 12,
+              alignItems: "end",
+            }}
+          >
+            <div>
+              <label style={labelStyle}>Frete</label>
+
+              <input
+                value={valorFrete}
+                onChange={(e) => setValorFrete(e.target.value)}
+                disabled={disableHeader}
+                placeholder="0,00"
+                inputMode="decimal"
+                style={{
+                  ...fieldStyle,
+                  textAlign: "right",
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Desconto</label>
+
+              <input
+                value={valorDesconto}
+                onChange={(e) => setValorDesconto(e.target.value)}
+                disabled={disableHeader}
+                placeholder="0,00"
+                inputMode="decimal"
+                style={{
+                  ...fieldStyle,
+                  textAlign: "right",
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Forma de pagamento</label>
+
+              <input
+                value={formaPagamento}
+                onChange={(e) => setFormaPagamento(e.target.value)}
+                disabled={disableHeader}
+                placeholder="Ex.: Boleto, Pix..."
+                style={fieldStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Condição de pagamento</label>
+
+              <input
+                value={condicaoPagamento}
+                onChange={(e) => setCondicaoPagamento(e.target.value)}
+                disabled={disableHeader}
+                placeholder="Ex.: 30 dias, 2 parcelas..."
+                style={fieldStyle}
+              />
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <label style={labelStyle}>Observação</label>
+
+            <textarea
+              value={observacao}
+              onChange={(e) => setObservacao(e.target.value)}
+              disabled={disableHeader}
+              placeholder="Observações adicionais da compra"
+              style={{
+                ...fieldStyle,
+                height: 86,
+                resize: "vertical",
+                paddingTop: 10,
+              }}
+            />
+          </div>
+
+          {!compraId && (
+            <div
+              style={{
+                marginTop: 14,
+                display: "flex",
+                justifyContent: "flex-end",
+              }}
+            >
+              <button
+                type="submit"
+                style={buttonStyles.primary}
+                disabled={savingHeader || !fornecedorId || !dataPedido}
+              >
+                <FiSave size={15} />{" "}
+                {savingHeader ? "Salvando..." : "Salvar cabeçalho"}
+              </button>
+            </div>
+          )}
         </form>
-      </div>
+      </DataCard>
 
-      <div style={{ height: 22 }} />
+      {fornecedorSelecionado && (
+        <>
+          <div style={{ height: 16 }} />
 
-      {/* ITENS */}
-      <div style={layoutStyles.card}>
-        <div style={sectionTitleStyle}>
-          <div style={sectionLabelStyle}>Itens da Compra</div>
-          <div style={sectionHintStyle}>
-            {compraId
-              ? `Itens: ${totais.totalItens} · Qtd: ${formatQtyBR(totais.totalQtd)} · Itens: R$ ${formatMoneyBR(
-                totais.totalValor
-              )} · Frete: R$ ${formatMoneyBR(totais.frete)} · Desc: R$ ${formatMoneyBR(totais.desconto)} · Total: R$ ${formatMoneyBR(
-                totais.totalFinal
-              )}`
-              : "Salve o cabeçalho para liberar"}
-          </div>
-        </div>
-
-        {/* FORM ITEM */}
-        <div style={layoutStyles.cardCompact}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
-            <div style={{ display: "flex", gap: 16, alignItems: "flex-end", width: "100%" }}>
-              {/* produto */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Produto</label>
-
-                <select
-                  value={produtoId}
-                  onChange={(e) => setProdutoId(e.target.value)}
-                  style={{ ...filterStyles.select, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
-                  disabled={disableItem}
-                >
-                  <option value="">{compraId ? "Selecione..." : "Salve o cabeçalho primeiro"}</option>
-                  {produtos.map((p) => (
-                    <option key={p.id} value={String(p.id)}>
-                      {p.nome}
-                    </option>
-                  ))}
-                </select>
-
-                <div style={helperLineStyle}>
-                  {produtoSelecionado ? (
-                    <>
-                      <span style={{ color: "#9ca3af" }}>Selecionado: </span>
-                      {produtoSelecionado.nome}
-                    </>
-                  ) : (
-                    "\u00A0"
-                  )}
-                </div>
-              </div>
-
-              {/* qtd */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Quantidade</label>
-                <input
-                  ref={qtdRef}
-                  value={qtd}
-                  onChange={(e) => setQtd(normalizeDecimalString(e.target.value))}
-                  placeholder="0,000"
-                  inputMode="decimal"
-                  style={{ ...filterStyles.input, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
-                  disabled={disableItem}
-                />
-                <div style={helperLineStyle} aria-hidden>
-                  {"\u00A0"}
-                </div>
-              </div>
-
-              {/* preço */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 260 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Preço Unitário</label>
-                <input
-                  value={precoUnit}
-                  onChange={(e) => setPrecoUnit(normalizeDecimalString(e.target.value))}
-                  placeholder="0,00"
-                  inputMode="decimal"
-                  style={{ ...filterStyles.input, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
-                  disabled={disableItem}
-                />
-                <div style={helperLineStyle} aria-hidden>
-                  {"\u00A0"}
-                </div>
-              </div>
-
-              {/* previsão */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Prev. Entrega</label>
-                <input
-                  type="date"
-                  value={previsaoEntrega}
-                  onChange={(e) => setPrevisaoEntrega(e.target.value)}
-                  style={{ ...filterStyles.input, height: 38, padding: "0 12px", boxSizing: "border-box", width: "100%" }}
-                  disabled={disableItem}
-                />
-                <div style={helperLineStyle} aria-hidden>
-                  {"\u00A0"}
-                </div>
-              </div>
-
-              {/* inserir */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 170 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>&nbsp;</label>
-                <button
-                  type="button"
-                  style={{ ...buttonStyles.primary, height: 38, padding: "0 12px", width: "100%", whiteSpace: "nowrap", fontSize: 13 }}
-                  onClick={handleAddItem}
-                  disabled={!canInsert}
-                >
-                  {savingItem ? "Inserindo..." : "+ Inserir"}
-                </button>
-                <div style={helperLineStyle} aria-hidden>
-                  {"\u00A0"}
-                </div>
-              </div>
+          <DataCard
+            title="Fornecedor selecionado"
+            subtitle="Resumo do fornecedor vinculado à compra."
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gap: 12,
+              }}
+            >
+              <InfoItem label="Fornecedor" value={fornecedorSelecionado.nome} />
+              <InfoItem label="ID" value={`#${fornecedorSelecionado.id}`} />
+              <InfoItem
+                label="Situação"
+                value={compraId ? "Compra iniciada" : "Aguardando cabeçalho"}
+              />
             </div>
+          </DataCard>
+        </>
+      )}
+
+      <div style={{ height: 16 }} />
+
+      <DataCard
+        title="Adicionar produtos"
+        subtitle={
+          compraId
+            ? "Inclua os produtos adquiridos nesta compra."
+            : "Salve o cabeçalho para liberar a inclusão dos produtos."
+        }
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "2fr 1fr 1fr 1fr auto",
+            gap: 12,
+            alignItems: "end",
+          }}
+        >
+          <div>
+            <label style={labelStyle}>Produto</label>
+
+            <select
+              value={produtoId}
+              disabled={disableItem}
+              onChange={(e) => setProdutoId(e.target.value)}
+              style={fieldStyle}
+            >
+              <option value="">
+                {!compraId
+                  ? "Salve o cabeçalho primeiro"
+                  : produtos.length === 0
+                    ? "Nenhum produto disponível"
+                    : "Selecione"}
+              </option>
+
+              {produtos.map((produto) => (
+                <option key={produto.id} value={produto.id}>
+                  {produto.nome || produto.descricao || `Produto #${produto.id}`}
+                </option>
+              ))}
+            </select>
           </div>
+
+          <div>
+            <label style={labelStyle}>Quantidade</label>
+
+            <input
+              ref={qtdRef}
+              value={qtd}
+              onChange={(e) => setQtd(e.target.value)}
+              disabled={disableItem || !produtoId}
+              placeholder="0"
+              inputMode="decimal"
+              style={{
+                ...fieldStyle,
+                textAlign: "right",
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={labelStyle}>Preço unitário</label>
+
+            <input
+              value={precoUnit}
+              onChange={(e) => setPrecoUnit(e.target.value)}
+              disabled={disableItem || !produtoId}
+              placeholder="0,00"
+              inputMode="decimal"
+              style={{
+                ...fieldStyle,
+                textAlign: "right",
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={labelStyle}>Previsão entrega</label>
+
+            <input
+              type="date"
+              value={previsaoEntrega}
+              onChange={(e) => setPrevisaoEntrega(e.target.value)}
+              disabled={disableItem || !produtoId}
+              style={fieldStyle}
+            />
+          </div>
+
+          <button
+            type="button"
+            style={{
+              ...buttonStyles.primary,
+              height: 40,
+              whiteSpace: "nowrap",
+            }}
+            disabled={!canInsert || savingItem}
+            onClick={adicionarItem}
+          >
+            <FiPlus size={15} /> {savingItem ? "Inserindo..." : "Adicionar"}
+          </button>
         </div>
 
-        <div style={{ paddingTop: 12, fontSize: 13, color: "#64748b" }}>
-          {compraId ? `Exibindo ${itens.length} item(ns)` : "Salve o cabeçalho para liberar os itens."}
-        </div>
+        {produtoSelecionado && (
+          <div
+            style={{
+              marginTop: 12,
+              border: "1px solid #e5e7eb",
+              background: "#f8fafc",
+              borderRadius: 16,
+              padding: 12,
+              display: "grid",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gap: 12,
+            }}
+          >
+            <InfoItem
+              label="Produto"
+              value={
+                produtoSelecionado.nome ||
+                produtoSelecionado.descricao ||
+                `Produto #${produtoSelecionado.id}`
+              }
+            />
 
-        {/* TABELA ITENS */}
-        <div style={{ overflowX: "auto", marginTop: 12 }}>
-          <table style={{ ...tableStyles.table, tableLayout: "auto" }}>
-            <thead>
+            <InfoItem
+              label="Preço sugerido"
+              value={formatMoneyBR(
+                produtoSelecionado.preco_custo ||
+                  produtoSelecionado.preco_unitario ||
+                  0
+              )}
+            />
+
+            <InfoItem
+              label="Subtotal informado"
+              value={formatMoneyBR(
+                compraCreateUtils.toNumberAny(qtd) *
+                  compraCreateUtils.toNumberAny(precoUnit)
+              )}
+            />
+          </div>
+        )}
+      </DataCard>
+
+      <div style={{ height: 16 }} />
+
+      <DataCard
+        title="Itens da compra"
+        subtitle="Confira os produtos já adicionados à compra."
+      >
+        <div
+          style={{
+            overflowX: "auto",
+            border: "1px solid #e5e7eb",
+            borderRadius: 18,
+          }}
+        >
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead style={{ background: "#f8fafc" }}>
               <tr>
-                <th style={{ ...tableStyles.th, width: 70 }}>ID</th>
-                <th style={{ ...tableStyles.th, width: "48%" }}>PRODUTO</th>
-                <th style={{ ...tableStyles.th, width: 150, textAlign: "right" }}>QTD</th>
-                <th style={{ ...tableStyles.th, width: 170, textAlign: "right" }}>PREÇO UNIT.</th>
-                <th style={{ ...tableStyles.th, width: 150 }}>PREV. ENTREGA</th>
-                <th style={{ ...tableStyles.th, width: 190, textAlign: "right" }}>SUBTOTAL</th>
-                <th style={{ ...tableStyles.th, width: 90, textAlign: "center" }}>AÇÕES</th>
+                {[
+                  "Produto",
+                  "Qtd",
+                  "Preço",
+                  "Subtotal",
+                  "Previsão",
+                  "Ações",
+                ].map((title) => (
+                  <th
+                    key={title}
+                    style={{
+                      ...thStyle,
+                      textAlign: title === "Ações" ? "right" : "left",
+                    }}
+                  >
+                    {title}
+                  </th>
+                ))}
               </tr>
             </thead>
 
             <tbody>
-              {!compraId && (
+              {itens.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
-                    Salve o cabeçalho para inserir itens.
+                  <td colSpan={6} style={emptyStyle}>
+                    Nenhum item adicionado.
                   </td>
                 </tr>
-              )}
-
-              {compraId && itens.length === 0 && (
-                <tr>
-                  <td colSpan={7} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
-                    Nenhum item inserido ainda.
-                  </td>
-                </tr>
-              )}
-
-              {compraId &&
-                itens.map((it, idx) => {
-                  const qtdN = toNumberAny(it.qtd);
-                  const precoN = toNumberAny(it.preco_unitario);
-                  const subtotal = qtdN * precoN;
-
-                  const nome =
-                    it.produto?.nome ||
-                    produtosMap.get(Number(it.produto_id))?.nome ||
-                    `Produto #${it.produto_id}`;
+              ) : (
+                itens.map((item) => {
+                  const qtdNum = compraCreateUtils.toNumberAny(item.qtd);
+                  const precoNum = compraCreateUtils.moneyFromApi(
+                    item.preco_unitario
+                  );
 
                   return (
-                    <tr key={it.id} style={{ background: idx % 2 === 0 ? "#fff" : "#f9fafb" }}>
-                      <td style={tableStyles.td}>{it.id}</td>
-
-                      <td style={{ ...tableStyles.td, whiteSpace: "normal", wordBreak: "break-word", lineHeight: 1.35 }} title={nome}>
-                        <div style={{ fontWeight: 700, color: "#0f172a" }}>{nome}</div>
+                    <tr key={item.id} style={{ borderTop: "1px solid #e5e7eb" }}>
+                      <td style={tdStyle}>
+                        <div style={{ fontWeight: 800, color: "#0f172a" }}>
+                          {item.produto?.nome ||
+                            item.produto?.descricao ||
+                            `Produto #${item.produto_id}`}
+                        </div>
                       </td>
 
-                      <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>
-                        {formatQtyBR(qtdN)}
+                      <td style={tdStyle}>{formatQtyBR(qtdNum)}</td>
+
+                      <td style={tdStyle}>{formatMoneyBR(precoNum)}</td>
+
+                      <td style={tdStyle}>
+                        <strong>{formatMoneyBR(qtdNum * precoNum)}</strong>
                       </td>
 
-                      <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>
-                        R$ {formatMoneyBR(precoN)}
+                      <td style={tdStyle}>
+                        {item.previsao_entrega
+                          ? new Date(item.previsao_entrega).toLocaleDateString(
+                              "pt-BR"
+                            )
+                          : "-"}
                       </td>
 
-                      <td style={tableStyles.td}>{it.previsao_entrega ? String(it.previsao_entrega).slice(0, 10) : "-"}</td>
-
-                      <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8, fontWeight: 800 }}>
-                        R$ {formatMoneyBR(subtotal)}
-                      </td>
-
-                      <td style={{ ...tableStyles.td, textAlign: "center" }}>
+                      <td style={{ ...tdStyle, textAlign: "right" }}>
                         <button
-                          style={{ ...buttonStyles.icon, opacity: removingItemId === it.id ? 0.6 : 1 }}
-                          onClick={() => handleRemoveItem(it.id)}
-                          disabled={removingItemId === it.id || !compraId}
+                          type="button"
                           title="Remover item"
+                          disabled={removingItemId === item.id}
+                          onClick={() => removerItem(item.id)}
+                          style={{
+                            ...iconButtonDanger,
+                            opacity: removingItemId === item.id ? 0.7 : 1,
+                            cursor:
+                              removingItemId === item.id
+                                ? "not-allowed"
+                                : "pointer",
+                          }}
                         >
-                          <FiTrash2 size={18} color="#dc2626" />
+                          <FiTrash2 size={15} />
                         </button>
                       </td>
                     </tr>
                   );
-                })}
+                })
+              )}
             </tbody>
           </table>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
-          <button style={buttonStyles.link} onClick={() => navigate("/compras")} disabled={savingItem || savingHeader}>
-            Voltar para lista
-          </button>
+        <div
+          style={{
+            marginTop: 16,
+            borderRadius: 18,
+            background: "#0f172a",
+            padding: 18,
+            color: "#fff",
+          }}
+        >
+          <div style={totalLineStyle}>
+            <span>Itens</span>
+            <strong>{totais.totalItens}</strong>
+          </div>
+
+          <div style={totalLineStyle}>
+            <span>Quantidade</span>
+            <strong>{formatQtyBR(totais.totalQtd)}</strong>
+          </div>
+
+          <div style={totalLineStyle}>
+            <span>Subtotal produtos</span>
+            <strong>{formatMoneyBR(totais.totalValor)}</strong>
+          </div>
+
+          <div style={totalLineStyle}>
+            <span>Frete</span>
+            <strong>{formatMoneyBR(totais.frete)}</strong>
+          </div>
+
+          <div style={totalLineStyle}>
+            <span>Desconto</span>
+            <strong>{formatMoneyBR(totais.desconto)}</strong>
+          </div>
+
+          <div
+            style={{
+              marginTop: 14,
+              paddingTop: 14,
+              borderTop: "1px solid rgba(255,255,255,0.16)",
+              display: "flex",
+              justifyContent: "space-between",
+              fontSize: 22,
+              fontWeight: 900,
+              gap: 16,
+            }}
+          >
+            <span>Total final</span>
+            <span>{formatMoneyBR(totais.totalFinal)}</span>
+          </div>
         </div>
+      </DataCard>
+    </PageShell>
+  );
+}
+
+function InfoItem({ label, value }: { label: string; value: any }) {
+  return (
+    <div>
+      <div style={infoLabelStyle}>{label}</div>
+
+      <div
+        style={{
+          marginTop: 4,
+          fontSize: 14,
+          fontWeight: 800,
+          color: "#0f172a",
+        }}
+      >
+        {value || "-"}
       </div>
     </div>
   );
 }
+
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#374151",
+  marginBottom: 6,
+};
+
+const fieldStyle: React.CSSProperties = {
+  ...filterStyles.input,
+  width: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
+  height: 40,
+};
+
+const infoLabelStyle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: 0.4,
+};
+
+const thStyle: React.CSSProperties = {
+  padding: "12px 14px",
+  fontSize: 11,
+  fontWeight: 800,
+  textTransform: "uppercase",
+  letterSpacing: 0.5,
+  color: "#64748b",
+  whiteSpace: "nowrap",
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: "12px 14px",
+  fontSize: 13,
+  color: "#334155",
+  verticalAlign: "middle",
+};
+
+const emptyStyle: React.CSSProperties = {
+  padding: 36,
+  textAlign: "center",
+  fontSize: 13,
+  color: "#64748b",
+};
+
+const iconButtonDanger: React.CSSProperties = {
+  width: 34,
+  height: 34,
+  borderRadius: 12,
+  border: "1px solid #e5e7eb",
+  background: "#ffffff",
+  color: "#dc2626",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const totalLineStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  fontSize: 13,
+  color: "#cbd5e1",
+  marginBottom: 8,
+};

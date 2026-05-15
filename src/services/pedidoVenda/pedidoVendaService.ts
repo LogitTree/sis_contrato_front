@@ -310,11 +310,11 @@ export async function aprovarItemPedidoVenda(
 export async function expedirItemPedidoVenda(
   pedidoId: number,
   itemId: number,
-  data?: any
+  data: PedidoVendaExpedicaoPayload
 ) {
   const response = await api.post(
     `/pedidosvenda/${pedidoId}/itens/${itemId}/baixar`,
-    data || {}
+    data
   );
 
   return response.data;
@@ -329,6 +329,140 @@ export async function devolverItemPedidoVenda(
     `/pedidosvenda/${pedidoId}/itens/${itemId}/devolver`,
     data || {}
   );
+
+  return response.data;
+}
+
+export type PedidoVendaExpedicaoPayload = {
+  qtd_baixa: number;
+  estoque_lote_id?: number | null;
+  data_expedicao?: string;
+  observacao?: string;
+  observacao_expedicao?: string;
+};
+
+export type PedidoVendaLoteOption = {
+  id: number;
+  produto_id: number;
+  lote?: string | null;
+  validade?: string | null;
+  quantidade: number;
+  custo?: number;
+  situacao_validade?: string;
+};
+
+export type PedidoVendaExpedicao = {
+  id: number;
+  pedido_venda_id: number;
+  pedido_item_venda_id: number;
+  produto_id: number;
+  estoque_lote_id?: number | null;
+  data_expedicao: string;
+  numero_romaneio: string;
+  qtd_expedida: string | number;
+  observacao?: string | null;
+  produto?: {
+    id?: number;
+    nome?: string;
+  };
+  lote?: {
+    id?: number;
+    lote?: string;
+    validade?: string;
+  };
+};
+
+export async function listarLotesItemPedidoVenda(
+  pedidoId: number,
+  itemId: number
+) {
+  const response = await api.get(
+    `/pedidosvenda/${pedidoId}/itens/${itemId}/lotes`
+  );
+
+  const data = response.data?.data ?? response.data ?? [];
+
+  return {
+    data: Array.isArray(data) ? (data as PedidoVendaLoteOption[]) : [],
+    produto_controla_lote: !!response.data?.produto_controla_lote,
+    produto_controla_validade: !!response.data?.produto_controla_validade,
+  };
+}
+
+export type PedidoVendaExpedicaoDataResumo = {
+  data_expedicao: string;
+  total_lancamentos: number;
+  total_expedido: number;
+};
+
+export type PedidoVendaExpedicaoRow = {
+  id: number;
+  pedido_venda_id: number;
+  pedido_item_venda_id: number;
+  produto_id: number;
+  estoque_lote_id?: number | null;
+  data_expedicao: string;
+  qtd_expedida: number;
+  observacao?: string | null;
+  pedido?: any;
+  produto?: any;
+  lote?: any;
+};
+
+export async function listarDatasExpedicoesPedidoVenda(params?: {
+  data_inicio?: string;
+  data_fim?: string;
+}) {
+  const response = await api.get("/pedidosvenda/expedicoes/datas", {
+    params,
+  });
+
+  return (response.data?.data || []) as PedidoVendaExpedicaoDataResumo[];
+}
+
+export async function listarExpedicoesPedidoVenda(params?: {
+  data_expedicao?: string;
+  data_inicio?: string;
+  data_fim?: string;
+  pedido_venda_id?: number;
+}) {
+  const response = await api.get("/pedidosvenda/expedicoes", {
+    params,
+  });
+
+  return {
+    data: (response.data?.data || []) as PedidoVendaExpedicaoRow[],
+    resumo: response.data?.resumo || {
+      total_lancamentos: 0,
+      total_expedido: 0,
+      total_pedidos: 0,
+    },
+  };
+}
+
+export async function cancelarExpedicaoPedidoVenda(
+  pedidoId: number,
+  itemId: number,
+  expedicaoId: number,
+  payload?: {
+    observacao?: string;
+  }
+) {
+  const response = await api.post(
+    `/pedidosvenda/${pedidoId}/itens/${itemId}/expedicoes/${expedicaoId}/cancelar`,
+    payload || {}
+  );
+
+  return response.data;
+}
+
+export async function gerarRomaneioExpedicaoPdf(dataExpedicao: string) {
+  const response = await api.get("/pedidosvenda/expedicoes/romaneio-pdf", {
+    params: {
+      data_expedicao: dataExpedicao,
+    },
+    responseType: "blob",
+  });
 
   return response.data;
 }

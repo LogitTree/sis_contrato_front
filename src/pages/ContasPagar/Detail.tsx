@@ -1,724 +1,582 @@
-import React, { useEffect, useMemo, useState } from "react";
-import api from "../../api/api";
-import { useNavigate, useParams } from "react-router-dom";
-import { toast } from "react-toastify";
+// src/pages/ContasPagar/Detail.tsx
 
-import { layoutStyles } from "../../styles/layout";
-import { tableStyles } from "../../styles/table";
+import { useState } from "react";
+import {
+  FiArrowLeft,
+  FiDollarSign,
+  FiTrash2,
+  FiXCircle,
+} from "react-icons/fi";
+
+import PageShell from "../../components/executive/PageShell";
+import PageHeader from "../../components/executive/PageHeader";
+import SummaryCard from "../../components/executive/SummaryCard";
+import DataCard from "../../components/executive/DataCard";
+
 import { buttonStyles } from "../../styles/buttons";
 import { filterStyles } from "../../styles/filters";
 
-import {
-    FiArrowLeft,
-    FiDollarSign,
-    FiTrash2,
-    FiXCircle,
-} from "react-icons/fi";
+import { contasPagarListUtils } from "./hooks/useContasPagarList";
+import { useContasPagarDetail } from "./hooks/useContasPagarDetail";
 
-type PagamentoRow = {
-    id: number;
-    conta_pagar_id: number;
-    data_pagamento: string;
-    valor_pago: string | number;
-    forma_pagamento?: string | null;
-    observacao?: string | null;
-    created_at?: string;
-};
+function formatCurrencyInput(value: string) {
+  const onlyNumbers = value.replace(/\D/g, "");
 
-type ContaPagarDetail = {
-    id: number;
-    compra_id: number;
-    fornecedor_id: number;
-    numero_documento?: string | null;
-    descricao?: string | null;
-    parcela: number;
-    total_parcelas: number;
-    data_emissao?: string | null;
-    data_vencimento?: string | null;
-    valor_original?: string | number | null;
-    valor_pago?: string | number | null;
-    saldo?: string | number | null;
-    status?: string | null;
-    forma_pagamento?: string | null;
-    observacao?: string | null;
+  if (!onlyNumbers) return "";
 
-    fornecedor?: {
-        id: number;
-        nome?: string;
-        cpf_cnpj?: string | null;
-    };
+  const numberValue = Number(onlyNumbers) / 100;
 
-    compra?: {
-        id: number;
-        data_pedido?: string | null;
-        numero_nota_fiscal?: string | null;
-        valor_total?: string | number | null;
-    };
-
-    pagamentos?: PagamentoRow[];
-};
-
-type FormaPagamentoOption = {
-    id: number;
-    descricao: string;
-    ativo: boolean;
-    permite_parcelamento: boolean;
-};
-
-
-function parseDecimalApi(v: any): number {
-    if (v === null || v === undefined || v === "") return 0;
-    if (typeof v === "number") return Number.isFinite(v) ? v : 0;
-
-    const s = String(v).trim().replace(/\s/g, "").replace("R$", "");
-
-    if (/^-?\d+(\.\d+)?$/.test(s)) {
-        const n = Number(s);
-        return Number.isFinite(n) ? n : 0;
-    }
-
-    if (/^-?\d{1,3}(\.\d{3})*,\d+$/.test(s)) {
-        const n = Number(s.replace(/\./g, "").replace(",", "."));
-        return Number.isFinite(n) ? n : 0;
-    }
-
-    if (/^-?\d+,\d+$/.test(s)) {
-        const n = Number(s.replace(",", "."));
-        return Number.isFinite(n) ? n : 0;
-    }
-
-    const n = Number(s);
-    return Number.isFinite(n) ? n : 0;
-}
-
-function formatMoneyBR(v: any): string {
-    const n = typeof v === "number" ? v : parseDecimalApi(v);
-    if (!Number.isFinite(n)) return "-";
-
-    return n.toLocaleString("pt-BR", {
-        style: "currency",
-        currency: "BRL",
-    });
-}
-
-function formatDateBR(value: any): string {
-    if (!value) return "-";
-    const s = String(value).trim();
-    if (!s) return "-";
-
-    const ymd = s.slice(0, 10);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
-        const [y, m, d] = ymd.split("-");
-        return `${d}/${m}/${y}`;
-    }
-
-    const dt = new Date(s);
-    if (!isNaN(dt.getTime())) {
-        const d = String(dt.getDate()).padStart(2, "0");
-        const m = String(dt.getMonth() + 1).padStart(2, "0");
-        const y = dt.getFullYear();
-        return `${d}/${m}/${y}`;
-    }
-
-    return "-";
-}
-
-function statusStyle(status: any) {
-    const s = String(status || "").toUpperCase();
-
-    if (s === "PAGO") {
-        return { background: "#dcfce7", color: "#166534" };
-    }
-
-    if (s === "PARCIAL") {
-        return { background: "#fef3c7", color: "#92400e" };
-    }
-
-    if (s === "VENCIDO") {
-        return { background: "#fee2e2", color: "#991b1b" };
-    }
-
-    if (s === "CANCELADO") {
-        return { background: "#e5e7eb", color: "#374151" };
-    }
-
-    return { background: "#dbeafe", color: "#1e40af" };
+  return numberValue.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
 }
 
 export default function ContasPagarDetail() {
-    const navigate = useNavigate();
-    const { id } = useParams();
+  const [modalPagamentoOpen, setModalPagamentoOpen] = useState(false);
 
-    const [loading, setLoading] = useState(true);
-    const [conta, setConta] = useState<ContaPagarDetail | null>(null);
+  const {
+    navigate,
 
-    const [pagamentoForm, setPagamentoForm] = useState({
-        data_pagamento: new Date().toISOString().slice(0, 10),
-        valor_pago: "",
-        forma_pagamento: "",
-        observacao: "",
-    });
+    loading,
+    conta,
 
-    const [savingPagamento, setSavingPagamento] = useState(false);
-    const [cancelandoConta, setCancelandoConta] = useState(false);
-    const [excluindoPagamentoId, setExcluindoPagamentoId] = useState<number | null>(null);
+    pagamentoForm,
+    setPagamentoForm,
 
-    const podePagar = useMemo(() => {
-        const status = String(conta?.status || "").toUpperCase();
-        return ["ABERTO", "PARCIAL", "VENCIDO"].includes(status);
-    }, [conta]);
+    savingPagamento,
+    cancelandoConta,
+    excluindoPagamentoId,
 
-    const podeCancelar = useMemo(() => {
-        const status = String(conta?.status || "").toUpperCase();
-        return ["ABERTO", "VENCIDO"].includes(status);
-    }, [conta]);
+    formasPagamento,
 
-    const [formasPagamento, setFormasPagamento] = useState<FormaPagamentoOption[]>([]);
+    podePagar,
+    podeCancelar,
 
-    async function carregarFormasPagamento() {
-        try {
-            const { data } = await api.get("/formas-pagamento", {
-                params: {
-                    ativo: true,
-                    page: 1,
-                    limit: 1000,
-                    sort: "descricao",
-                    order: "ASC",
-                },
-            });
+    registrarPagamento,
+    cancelarConta,
+    excluirPagamento,
+  } = useContasPagarDetail();
 
-            const rows =
-                data?.data ??
-                data?.rows ??
-                data?.items ??
-                [];
-
-            setFormasPagamento(rows);
-        } catch (err) {
-            console.error(err);
-            toast.error("Erro ao carregar formas de pagamento");
-        }
-    }
-
-    async function carregar() {
-        if (!id) return;
-
-        setLoading(true);
-        try {
-            const { data } = await api.get(`/contas-pagar/${id}`);
-            setConta(data);
-
-            setPagamentoForm((old) => ({
-                ...old,
-                valor_pago: String(parseDecimalApi(data?.saldo || 0)),
-                forma_pagamento: data?.forma_pagamento || "",
-            }));
-        } catch (err: any) {
-            console.error(err);
-            toast.error(err?.response?.data?.error || "Erro ao carregar conta a pagar");
-            navigate("/contas-pagar");
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    async function registrarPagamento(e: React.FormEvent) {
-        e.preventDefault();
-        if (!id || !conta) return;
-
-        const valorPago = parseDecimalApi(pagamentoForm.valor_pago);
-
-        if (valorPago <= 0) {
-            toast.warning("Informe um valor válido para pagamento.");
-            return;
-        }
-
-        if (!pagamentoForm.data_pagamento) {
-            toast.warning("Informe a data do pagamento.");
-            return;
-        }
-
-        if (!pagamentoForm.forma_pagamento) {
-            toast.warning("Selecione a forma de pagamento.");
-            return;
-        }
-        
-        setSavingPagamento(true);
-        try {
-            await api.post(`/contas-pagar/${id}/pagamentos`, {
-                data_pagamento: pagamentoForm.data_pagamento,
-                valor_pago: valorPago,
-                forma_pagamento: pagamentoForm.forma_pagamento || undefined,
-                observacao: pagamentoForm.observacao || undefined,
-            });
-
-            toast.success("Pagamento registrado com sucesso!");
-
-            setPagamentoForm((old) => ({
-                ...old,
-                observacao: "",
-            }));
-
-            await carregar();
-        } catch (err: any) {
-            console.error(err);
-            toast.error(err?.response?.data?.error || "Erro ao registrar pagamento");
-        } finally {
-            setSavingPagamento(false);
-        }
-    }
-
-    async function cancelarConta() {
-        if (!id || !conta) return;
-
-        const ok = window.confirm(`Cancelar a conta #${conta.id}?`);
-        if (!ok) return;
-
-        setCancelandoConta(true);
-        try {
-            await api.put(`/contas-pagar/${id}/cancelar`);
-            toast.success("Conta cancelada com sucesso!");
-            await carregar();
-        } catch (err: any) {
-            console.error(err);
-            toast.error(err?.response?.data?.error || "Erro ao cancelar conta");
-        } finally {
-            setCancelandoConta(false);
-        }
-    }
-
-    async function excluirPagamento(pagamento: PagamentoRow) {
-        const ok = window.confirm(
-            `Excluir o pagamento #${pagamento.id} no valor de ${formatMoneyBR(
-                pagamento.valor_pago
-            )}?`
-        );
-        if (!ok) return;
-
-        setExcluindoPagamentoId(pagamento.id);
-        try {
-            await api.delete(`/contas-pagar/pagamentos/${pagamento.id}`);
-            toast.success("Pagamento excluído com sucesso!");
-            await carregar();
-        } catch (err: any) {
-            console.error(err);
-            toast.error(err?.response?.data?.error || "Erro ao excluir pagamento");
-        } finally {
-            setExcluindoPagamentoId(null);
-        }
-    }
-
-    useEffect(() => {
-        carregar();
-        carregarFormasPagamento();
-    }, [id]);
-
-    if (loading) {
-        return (
-            <div style={layoutStyles.page}>
-                <div style={layoutStyles.card}>Carregando...</div>
-            </div>
-        );
-    }
-
-    if (!conta) {
-        return (
-            <div style={layoutStyles.page}>
-                <div style={layoutStyles.card}>Conta não encontrada.</div>
-            </div>
-        );
-    }
-
+  if (loading) {
     return (
-        <div style={layoutStyles.page}>
-            <div style={layoutStyles.header}>
-                <div>
-                    <h1 style={layoutStyles.title}>Conta a Pagar #{conta.id}</h1>
-                    <div style={{ fontSize: 13, color: "#64748b" }}>
-                        Parcela {conta.parcela}/{conta.total_parcelas}
-                    </div>
-                </div>
-
-                <div style={{ display: "flex", gap: 12 }}>
-                    <button
-                        style={buttonStyles.link}
-                        onClick={() => navigate("/contas-pagar")}
-                        disabled={savingPagamento || cancelandoConta}
-                    >
-                        <FiArrowLeft size={16} style={{ marginRight: 6 }} />
-                        Voltar
-                    </button>
-                </div>
-            </div>
-
-            <div
-                style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                    gap: 16,
-                    marginBottom: 16,
-                }}
-            >
-                <div style={layoutStyles.cardCompact}>
-                    <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
-                        Valor original
-                    </div>
-                    <div style={{ marginTop: 8, fontSize: 22, fontWeight: 700, color: "#0f172a" }}>
-                        {formatMoneyBR(conta.valor_original)}
-                    </div>
-                </div>
-
-                <div style={layoutStyles.cardCompact}>
-                    <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
-                        Valor pago
-                    </div>
-                    <div style={{ marginTop: 8, fontSize: 22, fontWeight: 700, color: "#166534" }}>
-                        {formatMoneyBR(conta.valor_pago)}
-                    </div>
-                </div>
-
-                <div style={layoutStyles.cardCompact}>
-                    <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
-                        Saldo
-                    </div>
-                    <div
-                        style={{
-                            marginTop: 8,
-                            fontSize: 22,
-                            fontWeight: 700,
-                            color:
-                                parseDecimalApi(conta.saldo) > 0 &&
-                                    String(conta.status || "").toUpperCase() === "VENCIDO"
-                                    ? "#b91c1c"
-                                    : "#0f172a",
-                        }}
-                    >
-                        {formatMoneyBR(conta.saldo)}
-                    </div>
-                </div>
-
-                <div style={layoutStyles.cardCompact}>
-                    <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
-                        Status
-                    </div>
-                    <div style={{ marginTop: 10 }}>
-                        <span
-                            style={{
-                                padding: "4px 10px",
-                                borderRadius: 999,
-                                fontSize: 12,
-                                fontWeight: 700,
-                                display: "inline-block",
-                                ...statusStyle(conta.status),
-                            }}
-                        >
-                            {String(conta.status || "-").replaceAll("_", " ")}
-                        </span>
-                    </div>
-                </div>
-            </div>
-
-            <div
-                style={{
-                    display: "grid",
-                    gridTemplateColumns: "1.2fr 1fr",
-                    gap: 16,
-                    alignItems: "start",
-                }}
-            >
-                <div style={layoutStyles.card}>
-                    <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>
-                        Dados da Conta
-                    </div>
-
-                    <div
-                        style={{
-                            display: "grid",
-                            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                            gap: 16,
-                        }}
-                    >
-                        <div>
-                            <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
-                                Fornecedor
-                            </div>
-                            <div style={{ marginTop: 4, fontWeight: 600 }}>
-                                {conta.fornecedor?.nome || "-"}
-                            </div>
-                        </div>
-
-                        <div>
-                            <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
-                                Compra
-                            </div>
-                            <div style={{ marginTop: 4, fontWeight: 600 }}>
-                                #{conta.compra_id}
-                            </div>
-                        </div>
-
-                        <div>
-                            <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
-                                Documento
-                            </div>
-                            <div style={{ marginTop: 4, fontWeight: 600 }}>
-                                {conta.numero_documento || "-"}
-                            </div>
-                        </div>
-
-                        <div>
-                            <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
-                                Parcela
-                            </div>
-                            <div style={{ marginTop: 4, fontWeight: 600 }}>
-                                {conta.parcela}/{conta.total_parcelas}
-                            </div>
-                        </div>
-
-                        <div>
-                            <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
-                                Data emissão
-                            </div>
-                            <div style={{ marginTop: 4, fontWeight: 600 }}>
-                                {formatDateBR(conta.data_emissao)}
-                            </div>
-                        </div>
-
-                        <div>
-                            <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
-                                Vencimento
-                            </div>
-                            <div style={{ marginTop: 4, fontWeight: 600 }}>
-                                {formatDateBR(conta.data_vencimento)}
-                            </div>
-                        </div>
-
-                        <div>
-                            <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
-                                Forma de pagamento
-                            </div>
-                            <div style={{ marginTop: 4, fontWeight: 600 }}>
-                                {conta.forma_pagamento || "-"}
-                            </div>
-                        </div>
-
-                        <div style={{ gridColumn: "1 / -1" }}>
-                            <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
-                                Observação
-                            </div>
-                            <div style={{ marginTop: 4, fontWeight: 500, color: "#334155" }}>
-                                {conta.observacao || "-"}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div style={layoutStyles.card}>
-                    <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>
-                        Ações
-                    </div>
-
-                    <div style={{ display: "grid", gap: 12 }}>
-                        <form onSubmit={registrarPagamento}>
-                            <div style={{ display: "grid", gap: 10 }}>
-                                <div>
-                                    <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
-                                        Data do pagamento
-                                    </label>
-                                    <input
-                                        type="date"
-                                        value={pagamentoForm.data_pagamento}
-                                        onChange={(e) =>
-                                            setPagamentoForm((old) => ({
-                                                ...old,
-                                                data_pagamento: e.target.value,
-                                            }))
-                                        }
-                                        style={{
-                                            ...filterStyles.input,
-                                            height: 40,
-                                            padding: "0 12px",
-                                            marginTop: 6,
-                                        }}
-                                        disabled={!podePagar || savingPagamento}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
-                                        Valor pago
-                                    </label>
-                                    <input
-                                        value={pagamentoForm.valor_pago}
-                                        onChange={(e) =>
-                                            setPagamentoForm((old) => ({
-                                                ...old,
-                                                valor_pago: e.target.value,
-                                            }))
-                                        }
-                                        style={{
-                                            ...filterStyles.input,
-                                            height: 40,
-                                            padding: "0 12px",
-                                            marginTop: 6,
-                                        }}
-                                        disabled={!podePagar || savingPagamento}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
-                                        Forma de pagamento
-                                    </label>
-                                    <select
-                                        value={pagamentoForm.forma_pagamento}
-                                        onChange={(e) =>
-                                            setPagamentoForm((old) => ({
-                                                ...old,
-                                                forma_pagamento: e.target.value,
-                                            }))
-                                        }
-                                        style={{
-                                            ...filterStyles.select,
-                                            height: 40,
-                                            padding: "0 12px",
-                                            marginTop: 6,
-                                        }}
-                                        disabled={!podePagar || savingPagamento}
-                                    >
-                                        <option value="">Selecione</option>
-                                        {formasPagamento.map((fp) => (
-                                            <option key={fp.id} value={fp.descricao}>
-                                                {fp.descricao}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
-                                        Observação
-                                    </label>
-                                    <textarea
-                                        value={pagamentoForm.observacao}
-                                        onChange={(e) =>
-                                            setPagamentoForm((old) => ({
-                                                ...old,
-                                                observacao: e.target.value,
-                                            }))
-                                        }
-                                        style={{
-                                            ...filterStyles.input,
-                                            minHeight: 80,
-                                            padding: 12,
-                                            marginTop: 6,
-                                            resize: "vertical",
-                                        }}
-                                        disabled={!podePagar || savingPagamento}
-                                    />
-                                </div>
-
-                                <button
-                                    type="submit"
-                                    style={buttonStyles.primary}
-                                    disabled={!podePagar || savingPagamento}
-                                >
-                                    <FiDollarSign size={16} style={{ marginRight: 6 }} />
-                                    Registrar pagamento
-                                </button>
-                            </div>
-                        </form>
-
-                        <button
-                            type="button"
-                            style={{
-                                ...buttonStyles.secondary,
-                                background: podeCancelar ? "#fff7ed" : "#f8fafc",
-                                color: podeCancelar ? "#b45309" : "#94a3b8",
-                                border: "1px solid #fed7aa",
-                            }}
-                            onClick={cancelarConta}
-                            disabled={!podeCancelar || cancelandoConta}
-                        >
-                            <FiXCircle size={16} style={{ marginRight: 6 }} />
-                            Cancelar conta
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div style={{ ...layoutStyles.card, marginTop: 16 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>
-                    Histórico de Pagamentos
-                </div>
-
-                <div style={{ overflowX: "auto" }}>
-                    <table style={{ ...tableStyles.table, tableLayout: "fixed" }}>
-                        <thead>
-                            <tr>
-                                <th style={{ ...tableStyles.th, width: 100 }}>ID</th>
-                                <th style={{ ...tableStyles.th, width: 150 }}>Data</th>
-                                <th style={{ ...tableStyles.th, width: 150, textAlign: "right" }}>
-                                    Valor
-                                </th>
-                                <th style={{ ...tableStyles.th, width: 180 }}>
-                                    Forma de pagamento
-                                </th>
-                                <th style={{ ...tableStyles.th, width: "40%" }}>
-                                    Observação
-                                </th>
-                                <th style={{ ...tableStyles.th, width: 120, textAlign: "center" }}>
-                                    Ações
-                                </th>
-                            </tr>
-                        </thead>
-
-                        <tbody>
-                            {!conta.pagamentos?.length && (
-                                <tr>
-                                    <td colSpan={6} style={{ textAlign: "center", padding: 20 }}>
-                                        Nenhum pagamento registrado.
-                                    </td>
-                                </tr>
-                            )}
-
-                            {conta.pagamentos?.map((p, index) => {
-                                const isDeleting = excluindoPagamentoId === Number(p.id);
-
-                                return (
-                                    <tr
-                                        key={p.id}
-                                        style={{
-                                            background: index % 2 === 0 ? "#fff" : "#f9fafb",
-                                            opacity: isDeleting ? 0.65 : 1,
-                                        }}
-                                    >
-                                        <td style={tableStyles.td}>{p.id}</td>
-                                        <td style={tableStyles.td}>{formatDateBR(p.data_pagamento)}</td>
-                                        <td style={{ ...tableStyles.td, textAlign: "right" }}>
-                                            {formatMoneyBR(p.valor_pago)}
-                                        </td>
-                                        <td style={tableStyles.td}>{p.forma_pagamento || "-"}</td>
-                                        <td style={tableStyles.td}>{p.observacao || "-"}</td>
-                                        <td style={{ ...tableStyles.td, textAlign: "center" }}>
-                                            <button
-                                                style={buttonStyles.icon}
-                                                onClick={() => excluirPagamento(p)}
-                                                disabled={isDeleting}
-                                                title="Excluir pagamento"
-                                            >
-                                                <FiTrash2
-                                                    size={18}
-                                                    color={isDeleting ? "#94a3b8" : "#dc2626"}
-                                                />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+      <PageShell>
+        <DataCard title="Conta a Pagar" subtitle="Carregando informações...">
+          <div style={emptyStyle}>Carregando...</div>
+        </DataCard>
+      </PageShell>
     );
+  }
+
+  if (!conta) {
+    return (
+      <PageShell>
+        <DataCard title="Conta a Pagar" subtitle="Registro não localizado.">
+          <div style={emptyStyle}>Conta não encontrada.</div>
+        </DataCard>
+      </PageShell>
+    );
+  }
+
+  const status = String(conta.status || "").toUpperCase();
+
+  return (
+    <PageShell>
+      <PageHeader
+        title={`Conta a Pagar #${conta.id}`}
+        subtitle={`Parcela ${conta.parcela}/${conta.total_parcelas}`}
+        action={
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              style={buttonStyles.secondary}
+              onClick={() => navigate("/contas-pagar")}
+              disabled={savingPagamento || cancelandoConta}
+            >
+              <FiArrowLeft size={15} /> Voltar
+            </button>
+
+            {podePagar && (
+              <button
+                type="button"
+                style={buttonStyles.primary}
+                onClick={() => setModalPagamentoOpen(true)}
+                disabled={savingPagamento}
+              >
+                <FiDollarSign size={15} /> Registrar pagamento
+              </button>
+            )}
+
+            {podeCancelar && (
+              <button
+                type="button"
+                style={{
+                  ...buttonStyles.secondary,
+                  color: "#b45309",
+                  background: "#fff7ed",
+                  border: "1px solid #fed7aa",
+                }}
+                onClick={cancelarConta}
+                disabled={cancelandoConta}
+              >
+                <FiXCircle size={15} />{" "}
+                {cancelandoConta ? "Cancelando..." : "Cancelar"}
+              </button>
+            )}
+          </div>
+        }
+      />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gap: 12,
+          marginBottom: 16,
+        }}
+      >
+        <SummaryCard
+          label="Valor original"
+          value={contasPagarListUtils.formatMoneyBR(conta.valor_original)}
+          tone="info"
+        />
+
+        <SummaryCard
+          label="Valor pago"
+          value={contasPagarListUtils.formatMoneyBR(conta.valor_pago)}
+          tone="success"
+        />
+
+        <SummaryCard
+          label="Saldo"
+          value={contasPagarListUtils.formatMoneyBR(conta.saldo)}
+          tone={
+            contasPagarListUtils.parseDecimalApi(conta.saldo) > 0
+              ? "danger"
+              : "success"
+          }
+        />
+
+        <SummaryCard
+          label="Status"
+          value={String(conta.status || "-").replaceAll("_", " ")}
+          tone={
+            status === "PAGO"
+              ? "success"
+              : status === "CANCELADO"
+                ? "danger"
+                : "info"
+          }
+        />
+      </div>
+
+      <DataCard title="Dados da conta" subtitle="Informações da parcela.">
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+            gap: 14,
+          }}
+        >
+          <InfoItem
+            label="Fornecedor"
+            value={
+              conta.fornecedor?.nome ||
+              (conta.fornecedor as any)?.razao_social ||
+              "-"
+            }
+          />
+
+          <InfoItem label="Compra" value={`#${conta.compra_id}`} />
+
+          <InfoItem label="Documento" value={conta.numero_documento || "-"} />
+
+          <InfoItem
+            label="Parcela"
+            value={`${conta.parcela}/${conta.total_parcelas}`}
+          />
+
+          <InfoItem
+            label="Data emissão"
+            value={contasPagarListUtils.formatDateBR(conta.data_emissao)}
+          />
+
+          <InfoItem
+            label="Vencimento"
+            value={contasPagarListUtils.formatDateBR(conta.data_vencimento)}
+          />
+
+          <InfoItem
+            label="Forma de pagamento"
+            value={conta.forma_pagamento || "-"}
+          />
+
+          <div>
+            <div style={infoLabelStyle}>Status</div>
+            <span
+              style={{
+                marginTop: 4,
+                display: "inline-flex",
+                borderRadius: 999,
+                padding: "5px 10px",
+                fontSize: 11,
+                fontWeight: 850,
+                ...contasPagarListUtils.statusStyle(
+                  conta.status,
+                  conta.data_vencimento
+                ),
+              }}
+            >
+              {contasPagarListUtils.isVencida(
+                conta.status,
+                conta.data_vencimento
+              )
+                ? "VENCIDO"
+                : String(conta.status || "-").replaceAll("_", " ")}
+            </span>
+          </div>
+
+          <div style={{ gridColumn: "1 / -1" }}>
+            <InfoItem label="Observação" value={conta.observacao || "-"} />
+          </div>
+        </div>
+      </DataCard>
+
+      <div style={{ height: 16 }} />
+
+      <DataCard
+        title="Histórico de pagamentos"
+        subtitle="Pagamentos registrados para esta conta."
+      >
+        <div
+          style={{
+            overflowX: "auto",
+            border: "1px solid #e5e7eb",
+            borderRadius: 18,
+          }}
+        >
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead style={{ background: "#f8fafc" }}>
+              <tr>
+                {[
+                  "ID",
+                  "Data",
+                  "Valor",
+                  "Forma de pagamento",
+                  "Observação",
+                  "Ações",
+                ].map((title) => (
+                  <th
+                    key={title}
+                    style={{
+                      ...thStyle,
+                      textAlign: title === "Ações" ? "right" : "left",
+                    }}
+                  >
+                    {title}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+
+            <tbody>
+              {!conta.pagamentos?.length ? (
+                <tr>
+                  <td colSpan={6} style={emptyStyle}>
+                    Nenhum pagamento registrado.
+                  </td>
+                </tr>
+              ) : (
+                conta.pagamentos.map((pagamento, index) => {
+                  const isDeleting =
+                    excluindoPagamentoId === Number(pagamento.id);
+
+                  return (
+                    <tr
+                      key={pagamento.id}
+                      style={{
+                        borderTop: "1px solid #e5e7eb",
+                        background: index % 2 === 0 ? "#fff" : "#f8fafc",
+                        opacity: isDeleting ? 0.65 : 1,
+                      }}
+                    >
+                      <td style={tdStyle}>
+                        <strong>#{pagamento.id}</strong>
+                      </td>
+
+                      <td style={tdStyle}>
+                        {contasPagarListUtils.formatDateBR(
+                          pagamento.data_pagamento
+                        )}
+                      </td>
+
+                      <td style={tdMoneyStyle}>
+                        {contasPagarListUtils.formatMoneyBR(
+                          pagamento.valor_pago
+                        )}
+                      </td>
+
+                      <td style={tdStyle}>
+                        {pagamento.forma_pagamento || "-"}
+                      </td>
+
+                      <td style={tdStyle}>{pagamento.observacao || "-"}</td>
+
+                      <td style={{ ...tdStyle, textAlign: "right" }}>
+                        <button
+                          type="button"
+                          style={{
+                            ...iconButtonDanger,
+                            cursor: isDeleting ? "not-allowed" : "pointer",
+                            opacity: isDeleting ? 0.65 : 1,
+                          }}
+                          onClick={() => excluirPagamento(pagamento)}
+                          disabled={isDeleting}
+                          title="Excluir pagamento"
+                        >
+                          <FiTrash2 size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </DataCard>
+
+      {modalPagamentoOpen && (
+        <div style={overlayStyle}>
+          <div style={modalStyle}>
+            <div style={modalHeaderStyle}>Registrar pagamento</div>
+
+            <form
+              onSubmit={async (e) => {
+                const ok = await registrarPagamento(e);
+                if (ok) setModalPagamentoOpen(false);
+              }}
+              style={{ padding: 20 }}
+            >
+              <div style={{ display: "grid", gap: 12 }}>
+                <div>
+                  <label style={labelStyle}>Data do pagamento</label>
+                  <input
+                    type="date"
+                    value={pagamentoForm.data_pagamento}
+                    onChange={(e) =>
+                      setPagamentoForm((old) => ({
+                        ...old,
+                        data_pagamento: e.target.value,
+                      }))
+                    }
+                    style={fieldStyle}
+                    disabled={savingPagamento}
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Valor pago</label>
+                  <input
+                    value={pagamentoForm.valor_pago}
+                    onChange={(e) =>
+                      setPagamentoForm((old) => ({
+                        ...old,
+                        valor_pago: formatCurrencyInput(e.target.value),
+                      }))
+                    }
+                    style={fieldStyle}
+                    placeholder="R$ 0,00"
+                    inputMode="numeric"
+                    disabled={savingPagamento}
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Forma de pagamento</label>
+                  <select
+                    value={pagamentoForm.forma_pagamento}
+                    onChange={(e) =>
+                      setPagamentoForm((old) => ({
+                        ...old,
+                        forma_pagamento: e.target.value,
+                      }))
+                    }
+                    style={fieldStyle}
+                    disabled={savingPagamento}
+                  >
+                    <option value="">Selecione</option>
+
+                    {formasPagamento.map((fp) => (
+                      <option key={fp.id} value={fp.descricao}>
+                        {fp.descricao}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Observação</label>
+                  <textarea
+                    value={pagamentoForm.observacao}
+                    onChange={(e) =>
+                      setPagamentoForm((old) => ({
+                        ...old,
+                        observacao: e.target.value,
+                      }))
+                    }
+                    style={{
+                      ...fieldStyle,
+                      height: 84,
+                      resize: "vertical",
+                      paddingTop: 10,
+                    }}
+                    disabled={savingPagamento}
+                  />
+                </div>
+              </div>
+
+              <div
+                style={{
+                  marginTop: 18,
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 10,
+                }}
+              >
+                <button
+                  type="button"
+                  style={buttonStyles.secondary}
+                  onClick={() => setModalPagamentoOpen(false)}
+                  disabled={savingPagamento}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  style={buttonStyles.primary}
+                  disabled={savingPagamento}
+                >
+                  <FiDollarSign size={15} />{" "}
+                  {savingPagamento ? "Registrando..." : "Confirmar pagamento"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </PageShell>
+  );
 }
+
+function InfoItem({ label, value }: { label: string; value: any }) {
+  return (
+    <div>
+      <div style={infoLabelStyle}>{label}</div>
+      <div
+        style={{
+          marginTop: 4,
+          fontSize: 14,
+          fontWeight: 800,
+          color: "#0f172a",
+        }}
+      >
+        {value || "-"}
+      </div>
+    </div>
+  );
+}
+
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#374151",
+  marginBottom: 6,
+};
+
+const fieldStyle: React.CSSProperties = {
+  ...filterStyles.input,
+  width: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
+  height: 40,
+};
+
+const infoLabelStyle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: 0.4,
+};
+
+const thStyle: React.CSSProperties = {
+  padding: "12px 14px",
+  fontSize: 11,
+  fontWeight: 800,
+  textTransform: "uppercase",
+  letterSpacing: 0.5,
+  color: "#64748b",
+  whiteSpace: "nowrap",
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: "12px 14px",
+  fontSize: 13,
+  color: "#334155",
+  verticalAlign: "middle",
+};
+
+const tdMoneyStyle: React.CSSProperties = {
+  ...tdStyle,
+  fontWeight: 900,
+  color: "#166534",
+};
+
+const emptyStyle: React.CSSProperties = {
+  padding: 36,
+  textAlign: "center",
+  fontSize: 13,
+  color: "#64748b",
+};
+
+const iconButtonDanger: React.CSSProperties = {
+  width: 34,
+  height: 34,
+  borderRadius: 12,
+  border: "1px solid #e5e7eb",
+  background: "#ffffff",
+  color: "#dc2626",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const overlayStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(15,23,42,0.45)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 9999,
+};
+
+const modalStyle: React.CSSProperties = {
+  width: 520,
+  maxWidth: "95vw",
+  background: "#fff",
+  borderRadius: 24,
+  overflow: "hidden",
+  boxShadow: "0 25px 60px rgba(0,0,0,0.25)",
+};
+
+const modalHeaderStyle: React.CSSProperties = {
+  padding: "18px 22px",
+  borderBottom: "1px solid #e5e7eb",
+  fontSize: 18,
+  fontWeight: 800,
+  color: "#0f172a",
+};

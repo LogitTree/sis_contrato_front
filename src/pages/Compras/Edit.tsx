@@ -1,1005 +1,867 @@
 // src/pages/Compras/Edit.tsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import api from "../../api/api";
-import { useNavigate, useParams } from "react-router-dom";
-import { toast } from "react-toastify";
 
-import { layoutStyles } from "../../styles/layout";
+import { FiPlus, FiSave, FiTrash2 } from "react-icons/fi";
+
+import PageShell from "../../components/executive/PageShell";
+import PageHeader from "../../components/executive/PageHeader";
+import SummaryCard from "../../components/executive/SummaryCard";
+import DataCard from "../../components/executive/DataCard";
+
 import { buttonStyles } from "../../styles/buttons";
 import { filterStyles } from "../../styles/filters";
-import { tableStyles } from "../../styles/table";
 
-import { FiTrash2 } from "react-icons/fi";
+import {
+  compraEditUtils,
+  useCompraEdit,
+} from "./hooks/useCompraEdit";
 
-type CompraStatus =
-  | "ABERTA"
-  | "PARCIALMENTE_RECEBIDA"
-  | "RECEBIDA"
-  | "CANCELADA";
-
-type FornecedorOption = { id: number; nome: string };
-type ProdutoOption = { id: number; nome?: string; descricao?: string; nome_fantasia?: string };
-
-type CompraItem = {
-  id: number;
-  produto_id: number;
-  qtd: string;
-  preco_unitario: string;
-  recebido_qtd?: string;
-  previsao_entrega?: string | null;
-  produto?: { nome?: string; descricao?: string };
-};
-
-function pickListArray(resData: any): any[] {
-  if (Array.isArray(resData?.data)) return resData.data;
-  if (Array.isArray(resData?.rows)) return resData.rows;
-  if (Array.isArray(resData?.data?.rows)) return resData.data.rows;
-  if (Array.isArray(resData?.data?.data)) return resData.data.data;
-  if (Array.isArray(resData?.items)) return resData.items;
-  return [];
-}
-
-function toNumberAny(v: any): number {
-  if (v === null || v === undefined) return 0;
-  const s = String(v).trim();
-  if (!s) return 0;
-
-  const hasComma = s.includes(",");
-  const hasDot = s.includes(".");
-
-  if (hasComma && hasDot) {
-    const normalized = s.replace(/\./g, "").replace(",", ".");
-    const n = Number(normalized);
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  if (hasComma) {
-    const n = Number(s.replace(",", "."));
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  const n = Number(s);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function formatMoneyBR(n: number) {
-  return n.toLocaleString("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+function formatMoneyBR(v: any) {
+  return compraEditUtils.moneyFromApi(v).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
   });
 }
 
-function formatQtyBR(n: number) {
-  return n.toLocaleString("pt-BR", {
+function formatQtyBR(v: any) {
+  return compraEditUtils.toNumberAny(v).toLocaleString("pt-BR", {
     minimumFractionDigits: 3,
     maximumFractionDigits: 3,
   });
 }
 
-function formatDateISO(value: any): string {
-  if (!value) return "";
-  if (typeof value === "string") return value.slice(0, 10);
-  const d = new Date(value);
-  if (isNaN(d.getTime())) return "";
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
+function statusStyle(status?: string): React.CSSProperties {
+  const s = String(status || "").toUpperCase();
 
-function normalizeDecimalString(v: string) {
-  const clean = (v || "").replace(/[^\d.,]/g, "");
-  const hasComma = clean.includes(",");
-  const hasDot = clean.includes(".");
-  if (hasComma && hasDot) return clean.replace(/\./g, "").replace(",", ".");
-  if (hasComma) return clean.replace(",", ".");
-  return clean;
-}
-
-function nomeProduto(p?: ProdutoOption | null) {
-  if (!p) return "Produto";
-  return p.nome ?? p.descricao ?? p.nome_fantasia ?? `Produto #${p.id}`;
-}
-
-function normalizeCompraStatus(value: any): CompraStatus {
-  const s = String(value || "ABERTA").toUpperCase();
-
-  if (s === "PARCIALMENTE_RECEBIDA") return "PARCIALMENTE_RECEBIDA";
-  if (s === "RECEBIDA") return "RECEBIDA";
-  if (s === "CANCELADA") return "CANCELADA";
-  return "ABERTA";
-}
-
-function getStatusColor(status: CompraStatus) {
-  if (status === "RECEBIDA") return "#166534";
-  if (status === "PARCIALMENTE_RECEBIDA") return "#92400e";
-  if (status === "CANCELADA") return "#991b1b";
-  return "#1e40af";
-}
-
-export default function ComprasEdit() {
-  const navigate = useNavigate();
-  const params = useParams();
-  const compraId = Number(params.id);
-
-  const [loading, setLoading] = useState(true);
-
-  const [fornecedorId, setFornecedorId] = useState("");
-  const [dataPedido, setDataPedido] = useState("");
-  const [observacao, setObservacao] = useState("");
-  const [status, setStatus] = useState<CompraStatus>("ABERTA");
-
-  const [numeroNF, setNumeroNF] = useState("");
-  const [serieNF, setSerieNF] = useState("");
-  const [dataEmissaoNF, setDataEmissaoNF] = useState("");
-  const [chaveNfe, setChaveNfe] = useState("");
-
-  const [valorFrete, setValorFrete] = useState("");
-  const [valorDesconto, setValorDesconto] = useState("");
-
-  const [formaPagamento, setFormaPagamento] = useState("");
-  const [condicaoPagamento, setCondicaoPagamento] = useState("");
-  const [dataVencimento, setDataVencimento] = useState("");
-
-  const [savingHeader, setSavingHeader] = useState(false);
-  const [savingItem, setSavingItem] = useState(false);
-  const [removingItemId, setRemovingItemId] = useState<number | null>(null);
-
-  const [fornecedores, setFornecedores] = useState<FornecedorOption[]>([]);
-  const [produtos, setProdutos] = useState<ProdutoOption[]>([]);
-  const produtosMap = useMemo(() => new Map(produtos.map((p) => [p.id, p])), [produtos]);
-
-  const [itens, setItens] = useState<CompraItem[]>([]);
-
-  const [produtoId, setProdutoId] = useState("");
-  const [qtd, setQtd] = useState("");
-  const [precoUnit, setPrecoUnit] = useState("");
-  const [previsaoEntrega, setPrevisaoEntrega] = useState("");
-
-  const qtdRef = useRef<HTMLInputElement | null>(null);
-
-  const helperLineStyle: React.CSSProperties = {
-    marginTop: 6,
-    fontSize: 12,
-    color: "#64748b",
-    minHeight: 18,
-    lineHeight: "16px",
-    overflow: "hidden",
-    display: "-webkit-box",
-    WebkitBoxOrient: "vertical" as any,
-    WebkitLineClamp: 2 as any,
-  };
-
-  const sectionTitleStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingBottom: 12,
-    marginBottom: 10,
-    borderBottom: "1px solid #eef2f7",
-    gap: 12,
-  };
-
-  const sectionLabelStyle: React.CSSProperties = {
-    fontSize: 14,
-    fontWeight: 800,
-    color: "#0f172a",
-  };
-
-  const sectionHintStyle: React.CSSProperties = {
-    fontSize: 12,
-    color: "#64748b",
-    fontWeight: 600,
-  };
-
-  const headerStackStyle: React.CSSProperties = {
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-    width: "100%",
-  };
-
-  const headerRowStyle: React.CSSProperties = {
-    display: "flex",
-    gap: 12,
-    width: "100%",
-    alignItems: "flex-end",
-    flexWrap: "wrap",
-  };
-
-  const totais = useMemo(() => {
-    const totalItens = itens.length;
-    const totalQtd = itens.reduce((acc, it) => acc + toNumberAny(it.qtd), 0);
-    const totalValor = itens.reduce(
-      (acc, it) => acc + toNumberAny(it.qtd) * toNumberAny(it.preco_unitario),
-      0
-    );
-
-    const frete = toNumberAny(valorFrete);
-    const desconto = toNumberAny(valorDesconto);
-    const totalFinal = totalValor + frete - desconto;
-
-    return { totalItens, totalQtd, totalValor, frete, desconto, totalFinal };
-  }, [itens, valorFrete, valorDesconto]);
-
-  async function loadCombos() {
-    const [resFornec, resProd] = await Promise.all([
-      api.get("/fornecedores", { params: { page: 1, limit: 1000 } }),
-      api.get("/produtos", { params: { page: 1, limit: 2000 } }),
-    ]);
-
-    const forn = pickListArray(resFornec.data).map((f: any) => ({
-      id: Number(f.id),
-      nome: f.nome ?? f.razao_social ?? f.nome_fantasia ?? `Fornecedor #${f.id}`,
-    }));
-    setFornecedores(forn);
-
-    const prods = pickListArray(resProd.data).map((p: any) => ({
-      id: Number(p.id),
-      nome: p.nome ?? p.descricao ?? `Produto #${p.id}`,
-      descricao: p.descricao,
-      nome_fantasia: p.nome_fantasia,
-    }));
-    setProdutos(prods);
+  if (s === "RECEBIDA") {
+    return { background: "#dcfce7", color: "#166534" };
   }
 
-  async function loadCompra() {
-    const res = await api.get(`/compras/${compraId}`);
-    const c = res?.data?.data ?? res?.data ?? null;
-    if (!c?.id) throw new Error("Compra não encontrada");
-
-    setFornecedorId(c.fornecedor_id ? String(c.fornecedor_id) : "");
-    setDataPedido(formatDateISO(c.data_pedido));
-    setStatus(normalizeCompraStatus(c.status));
-    setObservacao(c.observacao ?? "");
-
-    setNumeroNF(c.numero_nota_fiscal ? String(c.numero_nota_fiscal) : "");
-    setSerieNF(c.serie_nota_fiscal ? String(c.serie_nota_fiscal) : "");
-    setDataEmissaoNF(formatDateISO(c.data_emissao_nf));
-    setChaveNfe(c.chave_nfe ? String(c.chave_nfe) : "");
-
-    setValorFrete(c.valor_frete !== null && c.valor_frete !== undefined ? String(c.valor_frete) : "");
-    setValorDesconto(c.valor_desconto !== null && c.valor_desconto !== undefined ? String(c.valor_desconto) : "");
-
-    setFormaPagamento(c.forma_pagamento ? String(c.forma_pagamento) : "");
-    setCondicaoPagamento(c.condicao_pagamento ? String(c.condicao_pagamento) : "");
-    setDataVencimento(formatDateISO(c.data_vencimento));
-
-    const rawItens = c.itens ?? c.CompraItems ?? c.compra_itens ?? c.items ?? [];
-    const lista: CompraItem[] = (Array.isArray(rawItens) ? rawItens : []).map((it: any) => ({
-      id: Number(it.id),
-      produto_id: Number(it.produto_id),
-      qtd: String(it.qtd ?? "0"),
-      preco_unitario: String(it.preco_unitario ?? "0"),
-      recebido_qtd: String(it.recebido_qtd ?? "0"),
-      previsao_entrega: it.previsao_entrega ? formatDateISO(it.previsao_entrega) : null,
-      produto: it.produto ?? it.Produto ?? undefined,
-    }));
-    setItens(lista);
+  if (s === "PARCIALMENTE_RECEBIDA") {
+    return { background: "#fef3c7", color: "#92400e" };
   }
 
-  useEffect(() => {
-    (async () => {
-      if (!compraId) {
-        toast.error("ID inválido");
-        navigate("/compras");
-        return;
-      }
-
-      setLoading(true);
-      try {
-        await Promise.all([loadCombos(), loadCompra()]);
-      } catch (err: any) {
-        console.error(err);
-        toast.error(err?.response?.data?.error || err?.message || "Erro ao carregar compra");
-        navigate("/compras");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [compraId, navigate]);
-
-  useEffect(() => {
-    if (!produtoId) return;
-    setTimeout(() => qtdRef.current?.focus(), 60);
-  }, [produtoId]);
-
-  async function salvarCabecalho(e?: React.FormEvent) {
-    e?.preventDefault?.();
-
-    if (!dataPedido) {
-      toast.error("Informe a data do pedido.");
-      return;
-    }
-
-    setSavingHeader(true);
-    try {
-      const payload = {
-        fornecedor_id: fornecedorId ? Number(fornecedorId) : null,
-        data_pedido: dataPedido,
-        observacao: observacao?.trim() || null,
-
-        numero_nota_fiscal: numeroNF?.trim() || null,
-        serie_nota_fiscal: serieNF?.trim() || null,
-        data_emissao_nf: dataEmissaoNF || null,
-        chave_nfe: chaveNfe?.trim() || null,
-
-        valor_frete: String(toNumberAny(valorFrete)),
-        valor_desconto: String(toNumberAny(valorDesconto)),
-
-        forma_pagamento: formaPagamento?.trim() || null,
-        condicao_pagamento: condicaoPagamento?.trim() || null,
-        data_vencimento: dataVencimento || null,
-      };
-
-      await api.put(`/compras/${compraId}`, payload);
-      toast.success("Cabeçalho atualizado!");
-      await loadCompra();
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.response?.data?.error || "Erro ao salvar cabeçalho");
-    } finally {
-      setSavingHeader(false);
-    }
+  if (s === "CANCELADA") {
+    return { background: "#fee2e2", color: "#991b1b" };
   }
 
-  async function inserirItem() {
-    if (!compraId) return toast.error("Compra inválida.");
-    if (!produtoId) return toast.error("Selecione um produto.");
+  return { background: "#dbeafe", color: "#1e40af" };
+}
 
-    const qtdN = toNumberAny(qtd);
-    const precoN = toNumberAny(precoUnit);
+export default function CompraEdit() {
+  const {
+    navigate,
+    compraId,
+    qtdRef,
 
-    if (!qtdN || qtdN <= 0) return toast.error("Informe a quantidade.");
-    if (precoN <= 0) return toast.error("Informe um preço unitário maior que zero.");
+    loading,
+    savingHeader,
+    savingItem,
+    removingItemId,
 
-    setSavingItem(true);
-    try {
-      const payload = {
-        produto_id: Number(produtoId),
-        qtd: String(qtdN),
-        preco_unitario: String(precoN),
-        previsao_entrega: previsaoEntrega ? previsaoEntrega : null,
-      };
+    fornecedores,
+    produtos,
+    itens,
 
-      await api.post(`/compras/${compraId}/itens`, payload);
+    fornecedorId,
+    setFornecedorId,
+    dataPedido,
+    setDataPedido,
+    observacao,
+    setObservacao,
+    status,
 
-      toast.success("Item inserido!");
+    numeroNF,
+    setNumeroNF,
+    serieNF,
+    setSerieNF,
+    dataEmissaoNF,
+    setDataEmissaoNF,
+    chaveNfe,
+    setChaveNfe,
 
-      setProdutoId("");
-      setQtd("");
-      setPrecoUnit("");
-      setPrevisaoEntrega("");
-      setTimeout(() => qtdRef.current?.focus(), 80);
+    valorFrete,
+    setValorFrete,
+    valorDesconto,
+    setValorDesconto,
 
-      await loadCompra();
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.response?.data?.error || "Erro ao inserir item");
-    } finally {
-      setSavingItem(false);
-    }
-  }
+    formaPagamento,
+    setFormaPagamento,
+    condicaoPagamento,
+    setCondicaoPagamento,
+    dataVencimento,
+    setDataVencimento,
 
-  async function removerItem(itemId: number) {
-    const ok = window.confirm("Remover este item?");
-    if (!ok) return;
+    produtoId,
+    setProdutoId,
+    qtd,
+    setQtd,
+    precoUnit,
+    setPrecoUnit,
+    previsaoEntrega,
+    setPrevisaoEntrega,
 
-    setRemovingItemId(itemId);
-    try {
-      await api.delete(`/compras/${compraId}/itens/${itemId}`);
-      toast.success("Item removido!");
-      await loadCompra();
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.response?.data?.error || "Erro ao remover item");
-    } finally {
-      setRemovingItemId(null);
-    }
-  }
+    fornecedorSelecionado,
+    produtoSelecionado,
+    totais,
 
-  const fornecedorSelecionado = useMemo(() => {
-    const id = Number(fornecedorId);
-    if (!id) return null;
-    return fornecedores.find((f) => f.id === id) ?? null;
-  }, [fornecedorId, fornecedores]);
+    compraEditavel,
+    canReceber,
+    disableHeader,
+    disableItem,
+    canInsert,
 
-  const produtoSelecionado = useMemo(() => {
-    const id = Number(produtoId);
-    if (!id) return null;
-    return produtosMap.get(id) ?? null;
-  }, [produtoId, produtosMap]);
-
-  const compraEditavel = status === "ABERTA";
-
-  const disableHeader =
-    loading ||
-    savingHeader ||
-    savingItem ||
-    removingItemId !== null ||
-    !compraEditavel;
-
-  const disableItem =
-    loading ||
-    savingItem ||
-    savingHeader ||
-    removingItemId !== null ||
-    !compraEditavel;
-
-  const canInsert =
-    !disableItem &&
-    !!produtoId &&
-    !!qtd &&
-    toNumberAny(qtd) > 0 &&
-    precoUnit !== "" &&
-    toNumberAny(precoUnit) > 0;
+    salvarCabecalho,
+    inserirItem,
+    removerItem,
+  } = useCompraEdit();
 
   return (
-    <div style={layoutStyles.page}>
-      <div style={layoutStyles.header}>
-        <div>
-          <h1 style={layoutStyles.title}>Compra #{compraId}</h1>
-          <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
-            Status: <b>{status.replaceAll("_", " ")}</b> · Total: <b>R$ {formatMoneyBR(totais.totalFinal)}</b>
-          </div>
-        </div>
-      </div>
-
-      <div style={layoutStyles.card}>
-        <div style={sectionTitleStyle}>
-          <div style={sectionLabelStyle}>Cabeçalho da Compra</div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              flexWrap: "wrap",
-              justifyContent: "flex-end",
-            }}
-          >
-            <div style={sectionHintStyle}>
-              {compraEditavel ? "Atualize e salve o cabeçalho" : "Compra não editável neste status"}
-            </div>
-
-            <div
-              style={{
-                padding: "6px 10px",
-                border: "1px solid #e5e7eb",
-                borderRadius: 10,
-                background: "#f8fafc",
-                fontSize: 12,
-                fontWeight: 900,
-                color: "#0f172a",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Total: R$ {formatMoneyBR(totais.totalFinal)}
-            </div>
-          </div>
-        </div>
-
-        <form onSubmit={salvarCabecalho}>
-          <div style={layoutStyles.cardCompact}>
-            <div style={headerStackStyle}>
-              <div style={headerRowStyle}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 320 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Fornecedor</label>
-
-                  <select
-                    value={fornecedorId}
-                    onChange={(e) => setFornecedorId(e.target.value)}
-                    style={{
-                      ...filterStyles.select,
-                      height: 38,
-                      padding: "0 12px",
-                      boxSizing: "border-box",
-                      width: "100%",
-                    }}
-                    disabled={disableHeader}
-                  >
-                    <option value="">Selecione...</option>
-                    {fornecedores.map((f) => (
-                      <option key={f.id} value={String(f.id)}>
-                        {f.nome}
-                      </option>
-                    ))}
-                  </select>
-
-                  <div style={helperLineStyle}>
-                    {fornecedorSelecionado ? (
-                      <>
-                        <span style={{ color: "#9ca3af" }}>Fornecedor selecionado: </span>
-                        {fornecedorSelecionado.nome}
-                      </>
-                    ) : (
-                      "\u00A0"
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Data do Pedido</label>
-
-                  <input
-                    type="date"
-                    value={dataPedido}
-                    onChange={(e) => setDataPedido(e.target.value)}
-                    style={{
-                      ...filterStyles.input,
-                      height: 38,
-                      padding: "0 12px",
-                      boxSizing: "border-box",
-                      width: "100%",
-                    }}
-                    disabled={disableHeader}
-                  />
-
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Status</label>
-
-                  <div
-                    style={{
-                      ...filterStyles.input,
-                      height: 38,
-                      padding: "0 12px",
-                      display: "flex",
-                      alignItems: "center",
-                      background: "#f8fafc",
-                      fontWeight: 700,
-                      color: getStatusColor(status),
-                    }}
-                  >
-                    {status.replaceAll("_", " ")}
-                  </div>
-
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-              </div>
-
-              <div style={headerRowStyle}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Número NF</label>
-                  <input
-                    value={numeroNF}
-                    onChange={(e) => setNumeroNF(e.target.value)}
-                    placeholder="Ex: 12345"
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
-                  />
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 180 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Série NF</label>
-                  <input
-                    value={serieNF}
-                    onChange={(e) => setSerieNF(e.target.value)}
-                    placeholder="Ex: 1"
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
-                  />
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Data Emissão NF</label>
-                  <input
-                    type="date"
-                    value={dataEmissaoNF}
-                    onChange={(e) => setDataEmissaoNF(e.target.value)}
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
-                  />
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 320 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Chave NFe</label>
-                  <input
-                    value={chaveNfe}
-                    onChange={(e) => setChaveNfe(e.target.value)}
-                    placeholder="44 dígitos (opcional)"
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
-                  />
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-              </div>
-
-              <div style={headerRowStyle}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 200 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Valor Frete</label>
-                  <input
-                    value={valorFrete}
-                    onChange={(e) => setValorFrete(normalizeDecimalString(e.target.value))}
-                    placeholder="0,00"
-                    inputMode="decimal"
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
-                  />
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 200 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Valor Desconto</label>
-                  <input
-                    value={valorDesconto}
-                    onChange={(e) => setValorDesconto(normalizeDecimalString(e.target.value))}
-                    placeholder="0,00"
-                    inputMode="decimal"
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
-                  />
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Forma Pagamento</label>
-                  <input
-                    value={formaPagamento}
-                    onChange={(e) => setFormaPagamento(e.target.value)}
-                    placeholder="Ex: PIX / Cartão / Boleto"
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
-                  />
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 260 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Condição Pagamento</label>
-                  <input
-                    value={condicaoPagamento}
-                    onChange={(e) => setCondicaoPagamento(e.target.value)}
-                    placeholder="Ex: 30/60/90"
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
-                  />
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Data Vencimento</label>
-                  <input
-                    type="date"
-                    value={dataVencimento}
-                    onChange={(e) => setDataVencimento(e.target.value)}
-                    style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                    disabled={disableHeader}
-                  />
-                  <div style={helperLineStyle} aria-hidden>
-                    {"\u00A0"}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: "flex", gap: 12, width: "100%" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Observação</label>
-
-                  <textarea
-                    value={observacao}
-                    onChange={(e) => setObservacao(e.target.value)}
-                    placeholder="Opcional"
-                    style={{
-                      ...filterStyles.input,
-                      height: 96,
-                      padding: "10px 12px",
-                      boxSizing: "border-box",
-                      width: "100%",
-                      resize: "vertical",
-                    }}
-                    disabled={disableHeader}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
+    <PageShell>
+      <PageHeader
+        title={`Editar Compra #${compraId || "-"}`}
+        subtitle="Atualize o cabeçalho da compra e gerencie os produtos adquiridos."
+        action={
+          <div style={{ display: "flex", gap: 10 }}>
             <button
               type="button"
-              style={buttonStyles.link}
-              onClick={() => navigate(-1)}
-              disabled={savingHeader || savingItem}
+              style={buttonStyles.secondary}
+              onClick={() => navigate("/compras")}
             >
               Voltar
             </button>
-            <button
-              type="submit"
-              style={buttonStyles.primary}
-              disabled={disableHeader || !dataPedido}
-            >
-              {savingHeader ? "Salvando..." : "Salvar Cabeçalho"}
-            </button>
+
+            {canReceber && (
+              <button
+                type="button"
+                style={buttonStyles.primary}
+                onClick={() => navigate(`/compras/${compraId}/receber`)}
+              >
+                Receber compra
+              </button>
+            )}
           </div>
-        </form>
+        }
+      />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gap: 12,
+          marginBottom: 16,
+        }}
+      >
+        <SummaryCard label="Compra" value={`#${compraId || "-"}`} />
+        <SummaryCard label="Status" value={String(status || "-").replaceAll("_", " ")} tone="info" />
+        <SummaryCard label="Itens" value={totais.totalItens} />
+        <SummaryCard label="Total final" value={formatMoneyBR(totais.totalFinal)} tone="success" />
       </div>
 
-      <div style={{ height: 22 }} />
+      <DataCard
+        title="Cabeçalho da compra"
+        subtitle={
+          compraEditavel
+            ? "Compra aberta. Cabeçalho liberado para edição."
+            : "Cabeçalho bloqueado porque a compra não está aberta."
+        }
+      >
+        <form onSubmit={salvarCabecalho}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "2fr 1fr 1fr",
+              gap: 12,
+              alignItems: "end",
+            }}
+          >
+            <div>
+              <label style={labelStyle}>Fornecedor</label>
 
-      <div style={layoutStyles.card}>
-        <div style={sectionTitleStyle}>
-          <div style={sectionLabelStyle}>Itens da Compra</div>
-          <div style={sectionHintStyle}>
-            {`Itens: ${totais.totalItens} · Qtd: ${formatQtyBR(totais.totalQtd)} · Itens: R$ ${formatMoneyBR(
-              totais.totalValor
-            )} · Frete: R$ ${formatMoneyBR(totais.frete)} · Desc: R$ ${formatMoneyBR(
-              totais.desconto
-            )} · Total: R$ ${formatMoneyBR(totais.totalFinal)}`}
-          </div>
-        </div>
+              <select
+                value={fornecedorId}
+                onChange={(e) => setFornecedorId(e.target.value)}
+                disabled={disableHeader}
+                style={fieldStyle}
+              >
+                <option value="">
+                  {loading ? "Carregando fornecedores..." : "Selecione"}
+                </option>
 
-        <div style={layoutStyles.cardCompact}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
-            <div style={{ display: "flex", gap: 12, alignItems: "flex-end", width: "100%", flexWrap: "wrap" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 280 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Produto</label>
-                <select
-                  value={produtoId}
-                  onChange={(e) => setProdutoId(e.target.value)}
-                  style={{
-                    ...filterStyles.select,
-                    height: 38,
-                    padding: "0 12px",
-                    boxSizing: "border-box",
-                    width: "100%",
-                  }}
-                  disabled={disableItem}
-                >
-                  <option value="">Selecione...</option>
-                  {produtos.map((p) => (
-                    <option key={p.id} value={String(p.id)}>
-                      {nomeProduto(p)}
-                    </option>
-                  ))}
-                </select>
+                {fornecedores.map((fornecedor) => (
+                  <option key={fornecedor.id} value={fornecedor.id}>
+                    {fornecedor.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-                <div style={helperLineStyle}>
-                  {produtoSelecionado ? (
-                    <>
-                      <span style={{ color: "#9ca3af" }}>Selecionado: </span>
-                      <b>{nomeProduto(produtoSelecionado)}</b>
-                    </>
-                  ) : (
-                    "\u00A0"
-                  )}
-                </div>
-              </div>
+            <div>
+              <label style={labelStyle}>Data do pedido</label>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Quantidade</label>
-                <input
-                  ref={qtdRef}
-                  value={qtd}
-                  onChange={(e) => setQtd(normalizeDecimalString(e.target.value))}
-                  placeholder="0,000"
-                  inputMode="decimal"
-                  style={{
-                    ...filterStyles.input,
-                    height: 38,
-                    padding: "0 12px",
-                    boxSizing: "border-box",
-                    width: "100%",
-                  }}
-                  disabled={disableItem}
-                />
-                <div style={helperLineStyle} aria-hidden>
-                  {"\u00A0"}
-                </div>
-              </div>
+              <input
+                type="date"
+                value={dataPedido}
+                onChange={(e) => setDataPedido(e.target.value)}
+                disabled={disableHeader}
+                style={fieldStyle}
+              />
+            </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 260 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Preço Unitário</label>
-                <input
-                  value={precoUnit}
-                  onChange={(e) => setPrecoUnit(normalizeDecimalString(e.target.value))}
-                  placeholder="0,00"
-                  inputMode="decimal"
-                  style={{
-                    ...filterStyles.input,
-                    height: 38,
-                    padding: "0 12px",
-                    boxSizing: "border-box",
-                    width: "100%",
-                  }}
-                  disabled={disableItem}
-                />
-                <div style={helperLineStyle} aria-hidden>
-                  {"\u00A0"}
-                </div>
-              </div>
+            <div>
+              <label style={labelStyle}>Status</label>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 220 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Prev. Entrega</label>
-                <input
-                  type="date"
-                  value={previsaoEntrega}
-                  onChange={(e) => setPrevisaoEntrega(e.target.value)}
-                  style={{
-                    ...filterStyles.input,
-                    height: 38,
-                    padding: "0 12px",
-                    boxSizing: "border-box",
-                    width: "100%",
-                  }}
-                  disabled={disableItem}
-                />
-                <div style={helperLineStyle} aria-hidden>
-                  {"\u00A0"}
-                </div>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 170 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>&nbsp;</label>
-                <button
-                  type="button"
-                  style={{
-                    ...buttonStyles.primary,
-                    height: 38,
-                    padding: "0 12px",
-                    width: "100%",
-                    whiteSpace: "nowrap",
-                    fontSize: 13,
-                  }}
-                  onClick={inserirItem}
-                  disabled={!canInsert}
-                >
-                  {savingItem ? "Inserindo..." : "+ Inserir"}
-                </button>
-                <div style={helperLineStyle} aria-hidden>
-                  {"\u00A0"}
-                </div>
+              <div
+                style={{
+                  ...fieldStyle,
+                  display: "flex",
+                  alignItems: "center",
+                  fontWeight: 900,
+                  ...statusStyle(status),
+                }}
+              >
+                {String(status || "-").replaceAll("_", " ")}
               </div>
             </div>
           </div>
+
+          <div
+            style={{
+              marginTop: 12,
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 1fr 2fr",
+              gap: 12,
+              alignItems: "end",
+            }}
+          >
+            <div>
+              <label style={labelStyle}>Nº nota fiscal</label>
+
+              <input
+                value={numeroNF}
+                onChange={(e) => setNumeroNF(e.target.value)}
+                disabled={disableHeader}
+                placeholder="Ex.: 12345"
+                style={fieldStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Série</label>
+
+              <input
+                value={serieNF}
+                onChange={(e) => setSerieNF(e.target.value)}
+                disabled={disableHeader}
+                placeholder="Ex.: 1"
+                style={fieldStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Emissão NF</label>
+
+              <input
+                type="date"
+                value={dataEmissaoNF}
+                onChange={(e) => setDataEmissaoNF(e.target.value)}
+                disabled={disableHeader}
+                style={fieldStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Chave NFe</label>
+
+              <input
+                value={chaveNfe}
+                onChange={(e) => setChaveNfe(e.target.value)}
+                disabled={disableHeader}
+                placeholder="Chave de acesso da NF-e"
+                style={fieldStyle}
+              />
+            </div>
+          </div>
+
+          <div
+            style={{
+              marginTop: 12,
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr",
+              gap: 12,
+              alignItems: "end",
+            }}
+          >
+            <div>
+              <label style={labelStyle}>Frete</label>
+
+              <input
+                value={valorFrete}
+                onChange={(e) =>
+                  setValorFrete(
+                    compraEditUtils.normalizeDecimalString(e.target.value)
+                  )
+                }
+                disabled={disableHeader}
+                placeholder="0,00"
+                inputMode="decimal"
+                style={{
+                  ...fieldStyle,
+                  textAlign: "right",
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Desconto</label>
+
+              <input
+                value={valorDesconto}
+                onChange={(e) =>
+                  setValorDesconto(
+                    compraEditUtils.normalizeDecimalString(e.target.value)
+                  )
+                }
+                disabled={disableHeader}
+                placeholder="0,00"
+                inputMode="decimal"
+                style={{
+                  ...fieldStyle,
+                  textAlign: "right",
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Forma de pagamento</label>
+
+              <input
+                value={formaPagamento}
+                onChange={(e) => setFormaPagamento(e.target.value)}
+                disabled={disableHeader}
+                placeholder="Ex.: Boleto, Pix..."
+                style={fieldStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Condição</label>
+
+              <input
+                value={condicaoPagamento}
+                onChange={(e) => setCondicaoPagamento(e.target.value)}
+                disabled={disableHeader}
+                placeholder="Ex.: 30 dias"
+                style={fieldStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Vencimento</label>
+
+              <input
+                type="date"
+                value={dataVencimento}
+                onChange={(e) => setDataVencimento(e.target.value)}
+                disabled={disableHeader}
+                style={fieldStyle}
+              />
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <label style={labelStyle}>Observação</label>
+
+            <textarea
+              value={observacao}
+              onChange={(e) => setObservacao(e.target.value)}
+              disabled={disableHeader}
+              placeholder="Observações adicionais da compra"
+              style={{
+                ...fieldStyle,
+                height: 86,
+                resize: "vertical",
+                paddingTop: 10,
+              }}
+            />
+          </div>
+
+          {fornecedorSelecionado && (
+            <div
+              style={{
+                marginTop: 12,
+                border: "1px solid #e5e7eb",
+                background: "#f8fafc",
+                borderRadius: 16,
+                padding: 12,
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gap: 12,
+              }}
+            >
+              <InfoItem label="Fornecedor" value={fornecedorSelecionado.nome} />
+              <InfoItem label="Fornecedor ID" value={`#${fornecedorSelecionado.id}`} />
+              <InfoItem
+                label="Edição"
+                value={compraEditavel ? "Liberada" : "Bloqueada"}
+              />
+            </div>
+          )}
+
+          {compraEditavel && (
+            <div
+              style={{
+                marginTop: 14,
+                display: "flex",
+                justifyContent: "flex-end",
+              }}
+            >
+              <button
+                type="submit"
+                style={buttonStyles.primary}
+                disabled={disableHeader || !dataPedido}
+              >
+                <FiSave size={15} />{" "}
+                {savingHeader ? "Salvando..." : "Salvar alterações"}
+              </button>
+            </div>
+          )}
+        </form>
+      </DataCard>
+
+      <div style={{ height: 16 }} />
+
+      <DataCard
+        title="Adicionar produtos"
+        subtitle={
+          compraEditavel
+            ? "Inclua novos produtos enquanto a compra estiver aberta."
+            : "Inclusão de itens bloqueada para o status atual."
+        }
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "2fr 1fr 1fr 1fr auto",
+            gap: 12,
+            alignItems: "end",
+          }}
+        >
+          <div>
+            <label style={labelStyle}>Produto</label>
+
+            <select
+              value={produtoId}
+              disabled={disableItem}
+              onChange={(e) => setProdutoId(e.target.value)}
+              style={fieldStyle}
+            >
+              <option value="">
+                {disableItem
+                  ? "Inclusão bloqueada"
+                  : produtos.length === 0
+                    ? "Nenhum produto disponível"
+                    : "Selecione"}
+              </option>
+
+              {produtos.map((produto) => (
+                <option key={produto.id} value={produto.id}>
+                  {compraEditUtils.nomeProduto(produto)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={labelStyle}>Quantidade</label>
+
+            <input
+              ref={qtdRef}
+              value={qtd}
+              onChange={(e) =>
+                setQtd(compraEditUtils.normalizeDecimalString(e.target.value))
+              }
+              disabled={disableItem || !produtoId}
+              placeholder="0"
+              inputMode="decimal"
+              style={{
+                ...fieldStyle,
+                textAlign: "right",
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={labelStyle}>Preço unitário</label>
+
+            <input
+              value={precoUnit}
+              onChange={(e) =>
+                setPrecoUnit(
+                  compraEditUtils.normalizeDecimalString(e.target.value)
+                )
+              }
+              disabled={disableItem || !produtoId}
+              placeholder="0,00"
+              inputMode="decimal"
+              style={{
+                ...fieldStyle,
+                textAlign: "right",
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={labelStyle}>Previsão entrega</label>
+
+            <input
+              type="date"
+              value={previsaoEntrega}
+              onChange={(e) => setPrevisaoEntrega(e.target.value)}
+              disabled={disableItem || !produtoId}
+              style={fieldStyle}
+            />
+          </div>
+
+          <button
+            type="button"
+            style={{
+              ...buttonStyles.primary,
+              height: 40,
+              whiteSpace: "nowrap",
+            }}
+            disabled={!canInsert || savingItem}
+            onClick={inserirItem}
+          >
+            <FiPlus size={15} /> {savingItem ? "Inserindo..." : "Adicionar"}
+          </button>
         </div>
 
-        <div style={{ paddingTop: 12, fontSize: 13, color: "#64748b" }}>
-          Exibindo {itens.length} item(ns)
-        </div>
+        {produtoSelecionado && (
+          <div
+            style={{
+              marginTop: 12,
+              border: "1px solid #e5e7eb",
+              background: "#f8fafc",
+              borderRadius: 16,
+              padding: 12,
+              display: "grid",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gap: 12,
+            }}
+          >
+            <InfoItem
+              label="Produto"
+              value={compraEditUtils.nomeProduto(produtoSelecionado)}
+            />
 
-        <div style={{ overflowX: "auto", marginTop: 12 }}>
-          <table style={{ ...tableStyles.table, tableLayout: "auto" }}>
-            <thead>
+            <InfoItem
+              label="Preço sugerido"
+              value={formatMoneyBR(
+                produtoSelecionado.preco_custo ||
+                produtoSelecionado.preco_unitario ||
+                0
+              )}
+            />
+
+            <InfoItem
+              label="Subtotal informado"
+              value={formatMoneyBR(
+                compraEditUtils.toNumberAny(qtd) *
+                compraEditUtils.toNumberAny(precoUnit)
+              )}
+            />
+          </div>
+        )}
+      </DataCard>
+
+      <div style={{ height: 16 }} />
+
+      <DataCard
+        title="Itens da compra"
+        subtitle="Confira os produtos vinculados à compra."
+      >
+        <div
+          style={{
+            overflowX: "auto",
+            border: "1px solid #e5e7eb",
+            borderRadius: 18,
+          }}
+        >
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead style={{ background: "#f8fafc" }}>
               <tr>
-                <th style={{ ...tableStyles.th, width: 70 }}>ID</th>
-                <th style={{ ...tableStyles.th, width: "52%" }}>PRODUTO</th>
-                <th style={{ ...tableStyles.th, width: 150, textAlign: "right" }}>QTD</th>
-                <th style={{ ...tableStyles.th, width: 170, textAlign: "right" }}>PREÇO UNIT.</th>
-                <th style={{ ...tableStyles.th, width: 160 }}>PREV. ENTREGA</th>
-                <th style={{ ...tableStyles.th, width: 190, textAlign: "right" }}>SUBTOTAL</th>
-                <th style={{ ...tableStyles.th, width: 90, textAlign: "center" }}>AÇÕES</th>
+                {[
+                  "Produto",
+                  "Qtd",
+                  "Recebido",
+                  "Preço",
+                  "Subtotal",
+                  "Previsão",
+                  "Ações",
+                ].map((title) => (
+                  <th
+                    key={title}
+                    style={{
+                      ...thStyle,
+                      textAlign: title === "Ações" ? "right" : "left",
+                    }}
+                  >
+                    {title}
+                  </th>
+                ))}
               </tr>
             </thead>
 
             <tbody>
-              {itens.length === 0 && !loading && (
+              {loading ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
-                    Nenhum item inserido ainda.
-                  </td>
-                </tr>
-              )}
-
-              {itens.map((it, idx) => {
-                const qtdN = toNumberAny(it.qtd);
-                const precoN = toNumberAny(it.preco_unitario);
-                const subtotal = qtdN * precoN;
-
-                const pOpt = produtosMap.get(it.produto_id);
-                const nome =
-                  it.produto?.nome ||
-                  it.produto?.descricao ||
-                  pOpt?.nome ||
-                  pOpt?.descricao ||
-                  `Produto #${it.produto_id}`;
-
-                const isRemoving = removingItemId === it.id;
-
-                return (
-                  <tr
-                    key={it.id}
-                    style={{
-                      background: idx % 2 === 0 ? "#fff" : "#f9fafb",
-                      opacity: isRemoving ? 0.6 : 1,
-                    }}
-                  >
-                    <td style={tableStyles.td}>{it.id}</td>
-
-                    <td
-                      style={{
-                        ...tableStyles.td,
-                        whiteSpace: "normal",
-                        wordBreak: "break-word",
-                        lineHeight: 1.35,
-                      }}
-                      title={nome}
-                    >
-                      <div style={{ fontWeight: 800, color: "#0f172a" }}>{nome}</div>
-                    </td>
-
-                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>
-                      {formatQtyBR(qtdN)}
-                    </td>
-
-                    <td style={{ ...tableStyles.td, textAlign: "right", paddingRight: 8 }}>
-                      R$ {formatMoneyBR(precoN)}
-                    </td>
-
-                    <td style={tableStyles.td}>
-                      {it.previsao_entrega ? formatDateISO(it.previsao_entrega) : "-"}
-                    </td>
-
-                    <td
-                      style={{
-                        ...tableStyles.td,
-                        textAlign: "right",
-                        paddingRight: 8,
-                        fontWeight: 900,
-                      }}
-                    >
-                      R$ {formatMoneyBR(subtotal)}
-                    </td>
-
-                    <td style={{ ...tableStyles.td, textAlign: "center" }}>
-                      <button
-                        style={{ ...buttonStyles.icon, opacity: isRemoving ? 0.6 : 1 }}
-                        onClick={() => removerItem(it.id)}
-                        disabled={disableItem || isRemoving}
-                        title="Remover item"
-                      >
-                        <FiTrash2 size={18} color="#dc2626" />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-
-              {loading && itens.length === 0 && (
-                <tr>
-                  <td colSpan={7} style={{ textAlign: "center", padding: 20, color: "#64748b" }}>
+                  <td colSpan={7} style={emptyStyle}>
                     Carregando itens...
                   </td>
                 </tr>
+              ) : itens.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={emptyStyle}>
+                    Nenhum item adicionado.
+                  </td>
+                </tr>
+              ) : (
+                itens.map((item) => {
+                  const qtdNum = compraEditUtils.toNumberAny(item.qtd);
+                  const recebidoNum = compraEditUtils.toNumberAny(
+                    item.recebido_qtd
+                  );
+                  const precoNum = compraEditUtils.moneyFromApi(
+                    item.preco_unitario
+                  );
+
+                  const produtoNome =
+                    item.produto?.nome ||
+                    item.produto?.descricao ||
+                    produtos.find((p) => Number(p.id) === Number(item.produto_id))
+                      ?.nome ||
+                    `Produto #${item.produto_id}`;
+
+                  const podeRemover = compraEditavel && recebidoNum <= 0;
+
+                  return (
+                    <tr
+                      key={item.id}
+                      style={{
+                        borderTop: "1px solid #e5e7eb",
+                        opacity: removingItemId === item.id ? 0.65 : 1,
+                      }}
+                    >
+                      <td style={tdStyle}>
+                        <div style={{ fontWeight: 800, color: "#0f172a" }}>
+                          {produtoNome}
+                        </div>
+                        <div style={subTextStyle}>Item #{item.id}</div>
+                      </td>
+
+                      <td style={tdStyle}>{formatQtyBR(qtdNum)}</td>
+
+                      <td style={tdStyle}>
+                        <span
+                          style={{
+                            fontWeight: 900,
+                            color: recebidoNum > 0 ? "#166534" : "#64748b",
+                          }}
+                        >
+                          {formatQtyBR(recebidoNum)}
+                        </span>
+                      </td>
+
+                      <td style={tdStyle}>{formatMoneyBR(precoNum)}</td>
+
+                      <td style={tdStyle}>
+                        <strong>{formatMoneyBR(qtdNum * precoNum)}</strong>
+                      </td>
+
+                      <td style={tdStyle}>
+                        {item.previsao_entrega
+                          ? item.previsao_entrega.slice(0, 10)
+                          : "-"}
+                      </td>
+
+                      <td style={{ ...tdStyle, textAlign: "right" }}>
+                        <button
+                          type="button"
+                          title={
+                            podeRemover
+                              ? "Remover item"
+                              : "Item não pode ser removido"
+                          }
+                          disabled={!podeRemover || removingItemId === item.id}
+                          onClick={() => removerItem(item.id)}
+                          style={{
+                            ...iconButtonDanger,
+                            cursor:
+                              !podeRemover || removingItemId === item.id
+                                ? "not-allowed"
+                                : "pointer",
+                            opacity:
+                              !podeRemover || removingItemId === item.id
+                                ? 0.65
+                                : 1,
+                          }}
+                        >
+                          <FiTrash2 size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
-          <button
-            style={buttonStyles.link}
-            onClick={() => navigate("/compras")}
-            disabled={savingItem || savingHeader}
+        <div
+          style={{
+            marginTop: 16,
+            borderRadius: 18,
+            background: "#0f172a",
+            padding: 18,
+            color: "#fff",
+          }}
+        >
+          <div style={totalLineStyle}>
+            <span>Itens</span>
+            <strong>{totais.totalItens}</strong>
+          </div>
+
+          <div style={totalLineStyle}>
+            <span>Quantidade</span>
+            <strong>{formatQtyBR(totais.totalQtd)}</strong>
+          </div>
+
+          <div style={totalLineStyle}>
+            <span>Subtotal produtos</span>
+            <strong>{formatMoneyBR(totais.totalValor)}</strong>
+          </div>
+
+          <div style={totalLineStyle}>
+            <span>Frete</span>
+            <strong>{formatMoneyBR(totais.frete)}</strong>
+          </div>
+
+          <div style={totalLineStyle}>
+            <span>Desconto</span>
+            <strong>{formatMoneyBR(totais.desconto)}</strong>
+          </div>
+
+          <div
+            style={{
+              marginTop: 14,
+              paddingTop: 14,
+              borderTop: "1px solid rgba(255,255,255,0.16)",
+              display: "flex",
+              justifyContent: "space-between",
+              fontSize: 22,
+              fontWeight: 900,
+              gap: 16,
+            }}
           >
-            Voltar para lista
-          </button>
+            <span>Total final</span>
+            <span>{formatMoneyBR(totais.totalFinal)}</span>
+          </div>
         </div>
+      </DataCard>
+    </PageShell>
+  );
+}
+
+function InfoItem({ label, value }: { label: string; value: any }) {
+  return (
+    <div>
+      <div style={infoLabelStyle}>{label}</div>
+
+      <div
+        style={{
+          marginTop: 4,
+          fontSize: 14,
+          fontWeight: 800,
+          color: "#0f172a",
+        }}
+      >
+        {value || "-"}
       </div>
     </div>
   );
 }
+
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#374151",
+  marginBottom: 6,
+};
+
+const fieldStyle: React.CSSProperties = {
+  ...filterStyles.input,
+  width: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
+  height: 40,
+};
+
+const infoLabelStyle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: 0.4,
+};
+
+const thStyle: React.CSSProperties = {
+  padding: "12px 14px",
+  fontSize: 11,
+  fontWeight: 800,
+  textTransform: "uppercase",
+  letterSpacing: 0.5,
+  color: "#64748b",
+  whiteSpace: "nowrap",
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: "12px 14px",
+  fontSize: 13,
+  color: "#334155",
+  verticalAlign: "middle",
+};
+
+const subTextStyle: React.CSSProperties = {
+  marginTop: 3,
+  fontSize: 12,
+  color: "#64748b",
+  fontWeight: 600,
+};
+
+const emptyStyle: React.CSSProperties = {
+  padding: 36,
+  textAlign: "center",
+  fontSize: 13,
+  color: "#64748b",
+};
+
+const iconButtonDanger: React.CSSProperties = {
+  width: 34,
+  height: 34,
+  borderRadius: 12,
+  border: "1px solid #e5e7eb",
+  background: "#ffffff",
+  color: "#dc2626",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const totalLineStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  fontSize: 13,
+  color: "#cbd5e1",
+  marginBottom: 8,
+};

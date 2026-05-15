@@ -28,6 +28,9 @@ import Login from "../pages/Login";
 import PedidoVenda from "../pages/PedidoVenda/List";
 import PedidoVendaCreate from "../pages/PedidoVenda/Create";
 import PedidoVendaEdit from "../pages/PedidoVenda/Edit";
+import VendaDireta from "../pages/VendaDireta/List";
+import VendaDiretaCreate from "../pages/VendaDireta/Create";
+import VendaDiretaEdit from "../pages/VendaDireta/Edit";
 import Compra from "../pages/Compras/List";
 import CompraCreate from "../pages/Compras/Create";
 import CompraEdit from "../pages/Compras/Edit";
@@ -53,6 +56,9 @@ import AcoesSistemaPage from "../pages/controleacesso/acoes-sistema/AcoesSistema
 import GruposUsuariosPage from "../pages/controleacesso/grupos-usuarios/GruposUsuariosPage";
 import PermissoesGrupoPage from "../pages/controleacesso/grupos-usuarios/permissoes/PermissoesGrupoPage";
 import UsuariosPage from "../pages/controleacesso/usuarios/UsuariosPage";
+import PedidoVendaExpedicao from "../pages/PedidoVenda/Expedicao";
+import PedidoVendaExpedicoesDatas from "../pages/PedidoVenda/ExpedicoesDatas";
+import PedidoVendaExpedicoesDataDetalhe from "../pages/PedidoVenda/ExpedicoesDataDetalhe";
 
 export default function AppRoutes() {
   return (
@@ -99,7 +105,23 @@ export default function AppRoutes() {
 
               <Route path="/pedidosvenda" element={<PedidoVenda />} />
               <Route path="/pedidosvenda/novo" element={<PedidoVendaCreate />} />
+
+              <Route
+                path="/pedidosvenda/expedicoes"
+                element={<PedidoVendaExpedicoesDatas />}
+              />
+
+              <Route
+                path="/pedidosvenda/expedicoes/:dataExpedicao"
+                element={<PedidoVendaExpedicoesDataDetalhe />}
+              />
+
               <Route path="/pedidosvenda/:id/editar" element={<PedidoVendaEdit />} />
+              <Route path="/pedidosvenda/:id/expedir" element={<PedidoVendaExpedicao />} />
+
+              <Route path="/vendadireta" element={<VendaDireta />} />
+              <Route path="/vendadireta/novo" element={<VendaDiretaCreate />} />
+              <Route path="/vendadireta/:id/editar" element={<VendaDiretaEdit />} />
 
               <Route path="/compras" element={<Compra />} />
               <Route path="/compras/novo" element={<CompraCreate />} />

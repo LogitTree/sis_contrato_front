@@ -138,9 +138,14 @@ export default function PedidoVendaEdit() {
 
     abrirModalBaixa,
     confirmarBaixa,
-
+    
+    dataExpedicao,
+    setDataExpedicao,
+    observacaoExpedicao,
+    setObservacaoExpedicao,
     modalBaixaOpen,
     setModalBaixaOpen,
+
     itemBaixa,
     qtdBaixa,
     setQtdBaixa,
@@ -328,8 +333,8 @@ export default function PedidoVendaEdit() {
                 {disableItem
                   ? "Inclusão bloqueada"
                   : contratoItensOptions.length === 0
-                  ? "Nenhum item disponível"
-                  : "Selecione"}
+                    ? "Nenhum item disponível"
+                    : "Selecione"}
               </option>
 
               {contratoItensOptions.map((item) => (
@@ -656,9 +661,7 @@ export default function PedidoVendaEdit() {
       {modalBaixaOpen && (
         <div style={overlayStyle}>
           <div style={modalStyle}>
-            <div style={modalHeaderStyle}>
-              Processar / Expedir Item
-            </div>
+            <div style={modalHeaderStyle}>Registrar Expedição do Item</div>
 
             <div style={{ padding: 20 }}>
               <div style={{ marginBottom: 14 }}>
@@ -671,8 +674,7 @@ export default function PedidoVendaEdit() {
                     color: "#0f172a",
                   }}
                 >
-                  {itemBaixa?.produto?.nome ||
-                    `Produto #${itemBaixa?.produto_id}`}
+                  {itemBaixa?.produto?.nome || `Produto #${itemBaixa?.produto_id}`}
                 </div>
               </div>
 
@@ -684,10 +686,7 @@ export default function PedidoVendaEdit() {
                   marginBottom: 14,
                 }}
               >
-                <InfoItem
-                  label="Qtd. solicitada"
-                  value={itemBaixa?.qtd || 0}
-                />
+                <InfoItem label="Qtd. solicitada" value={itemBaixa?.qtd || 0} />
 
                 <InfoItem
                   label="Qtd. reservada"
@@ -695,59 +694,80 @@ export default function PedidoVendaEdit() {
                 />
               </div>
 
-              <div>
-                <label style={labelStyle}>
-                  Quantidade da baixa
-                </label>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <label style={labelStyle}>Quantidade a expedir</label>
 
-                <input
-                  value={qtdBaixa}
-                  onChange={(e) => setQtdBaixa(e.target.value)}
-                  style={{
-                    ...fieldStyle,
-                    textAlign: "right",
-                  }}
-                  inputMode="decimal"
-                  autoFocus
-                />
+                  <input
+                    value={qtdBaixa}
+                    onChange={(e) => setQtdBaixa(e.target.value)}
+                    style={{
+                      ...fieldStyle,
+                      textAlign: "right",
+                    }}
+                    inputMode="decimal"
+                    autoFocus
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Data da expedição</label>
+
+                  <input
+                    type="date"
+                    value={dataExpedicao}
+                    onChange={(e) => setDataExpedicao(e.target.value)}
+                    style={fieldStyle}
+                  />
+                </div>
               </div>
 
               {controlaLoteProduto(itemBaixa) && (
                 <div style={{ marginTop: 14 }}>
-                  <label style={labelStyle}>
-                    Lote / Validade
-                  </label>
+                  <label style={labelStyle}>Lote / Validade</label>
 
                   <select
                     value={estoqueLoteId}
-                    onChange={(e) =>
-                      setEstoqueLoteId(e.target.value)
-                    }
+                    onChange={(e) => setEstoqueLoteId(e.target.value)}
                     style={fieldStyle}
                     disabled={loadingLotes}
                   >
                     <option value="">
-                      {loadingLotes
-                        ? "Carregando lotes..."
-                        : "Selecione o lote"}
+                      {loadingLotes ? "Carregando lotes..." : "Selecione o lote"}
                     </option>
 
                     {lotesOptions.map((lote: any) => (
                       <option key={lote.id} value={lote.id}>
-                        Lote:{" "}
-                        {lote.lote || lote.codigo_lote || "-"} •
-                        Validade:{" "}
-                        {formatDateBR(lote.validade)} •
-                        Saldo:{" "}
-                        {lote.qtd_disponivel ??
-                          lote.quantidade ??
-                          lote.saldo ??
-                          0}
+                        Lote: {lote.lote || lote.codigo_lote || "-"} • Validade:{" "}
+                        {formatDateBR(lote.validade)} • Saldo:{" "}
+                        {lote.qtd_disponivel ?? lote.quantidade ?? lote.saldo ?? 0}
                       </option>
                     ))}
                   </select>
                 </div>
               )}
+
+              <div style={{ marginTop: 14 }}>
+                <label style={labelStyle}>Observação da expedição</label>
+
+                <textarea
+                  value={observacaoExpedicao}
+                  onChange={(e) => setObservacaoExpedicao(e.target.value)}
+                  placeholder="Ex.: entrega parcial, motorista, rota, observações..."
+                  style={{
+                    ...fieldStyle,
+                    height: 78,
+                    resize: "vertical",
+                    paddingTop: 10,
+                  }}
+                />
+              </div>
 
               <div
                 style={{
@@ -772,8 +792,8 @@ export default function PedidoVendaEdit() {
                   onClick={confirmarBaixa}
                 >
                   {actingItemId === itemBaixa?.id
-                    ? "Processando..."
-                    : "Confirmar baixa"}
+                    ? "Registrando..."
+                    : "Confirmar expedição"}
                 </button>
               </div>
             </div>

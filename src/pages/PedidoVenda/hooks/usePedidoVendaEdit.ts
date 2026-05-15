@@ -26,6 +26,10 @@ function controlaLoteProduto(item: any) {
   );
 }
 
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export function usePedidoVendaEdit(pedidoId: number) {
   const qtdRef = useRef<HTMLInputElement | null>(null);
 
@@ -39,6 +43,9 @@ export function usePedidoVendaEdit(pedidoId: number) {
   const [itemBaixa, setItemBaixa] = useState<any>(null);
   const [qtdBaixa, setQtdBaixa] = useState("");
   const [estoqueLoteId, setEstoqueLoteId] = useState("");
+
+  const [dataExpedicao, setDataExpedicao] = useState(todayISO());
+  const [observacaoExpedicao, setObservacaoExpedicao] = useState("");
 
   const [lotesOptions, setLotesOptions] = useState<any[]>([]);
   const [loadingLotes, setLoadingLotes] = useState(false);
@@ -222,6 +229,7 @@ export function usePedidoVendaEdit(pedidoId: number) {
 
   const saldoContratoSelecionado = useMemo(() => {
     if (!contratoItemSelecionado) return 0;
+
     return pedidoVendaCreateUtils.toNumberAny(
       contratoItemSelecionado.saldo_contrato
     );
@@ -229,6 +237,7 @@ export function usePedidoVendaEdit(pedidoId: number) {
 
   const precoContratoAtual = useMemo(() => {
     if (!contratoItemSelecionado) return 0;
+
     return pedidoVendaCreateUtils.moneyFromApi(
       contratoItemSelecionado.preco_unitario_contratado
     );
@@ -237,6 +246,7 @@ export function usePedidoVendaEdit(pedidoId: number) {
   const qtdExcedeSaldoContrato = useMemo(() => {
     if (!contratoItemSelecionado) return false;
     if (!qtdInformadaNum) return false;
+
     return qtdInformadaNum > saldoContratoSelecionado;
   }, [contratoItemSelecionado, qtdInformadaNum, saldoContratoSelecionado]);
 
@@ -375,6 +385,8 @@ export function usePedidoVendaEdit(pedidoId: number) {
     setQtdBaixa(String(saldoParaBaixa || qtdReservada || item.qtd || ""));
     setEstoqueLoteId("");
     setLotesOptions([]);
+    setDataExpedicao(todayISO());
+    setObservacaoExpedicao("");
     setModalBaixaOpen(true);
 
     if (controlaLoteProduto(item) && item?.produto_id) {
@@ -392,8 +404,13 @@ export function usePedidoVendaEdit(pedidoId: number) {
       return;
     }
 
+    if (!dataExpedicao) {
+      toast.error("Informe a data da expedição.");
+      return;
+    }
+
     if (controlaLoteProduto(itemBaixa) && !estoqueLoteId) {
-      toast.error("Selecione o lote/validade para realizar a baixa.");
+      toast.error("Selecione o lote/validade para realizar a expedição.");
       return;
     }
 
@@ -403,20 +420,25 @@ export function usePedidoVendaEdit(pedidoId: number) {
       await expedirItemPedidoVenda(pedidoId, itemBaixa.id, {
         qtd_baixa: qtdNum,
         estoque_lote_id: estoqueLoteId ? Number(estoqueLoteId) : undefined,
+        data_expedicao: dataExpedicao,
+        observacao: observacaoExpedicao || undefined,
+        observacao_expedicao: observacaoExpedicao || undefined,
       });
 
-      toast.success("Baixa realizada com sucesso.");
+      toast.success("Expedição registrada com sucesso.");
 
       setModalBaixaOpen(false);
       setItemBaixa(null);
       setQtdBaixa("");
       setEstoqueLoteId("");
       setLotesOptions([]);
+      setDataExpedicao(todayISO());
+      setObservacaoExpedicao("");
 
       await carregarPedido();
     } catch (error: any) {
       console.error(error);
-      toast.error(error?.response?.data?.error || "Erro ao realizar baixa.");
+      toast.error(error?.response?.data?.error || "Erro ao registrar expedição.");
     } finally {
       setActingItemId(null);
     }
@@ -460,6 +482,11 @@ export function usePedidoVendaEdit(pedidoId: number) {
     precoContratoAtual,
     qtdExcedeSaldoContrato,
 
+    dataExpedicao,
+    setDataExpedicao,
+    observacaoExpedicao,
+    setObservacaoExpedicao,
+
     canEditHeader,
     canManageItems,
     disableHeader,
@@ -481,6 +508,7 @@ export function usePedidoVendaEdit(pedidoId: number) {
     loadingLotes,
     abrirModalBaixa,
     confirmarBaixa,
+
 
     refetch: carregarPedido,
   };

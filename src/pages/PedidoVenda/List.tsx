@@ -11,6 +11,7 @@ import {
   FiSend,
   FiTrash2,
   FiXCircle,
+  FiTruck
 } from "react-icons/fi";
 
 import PageShell from "../../components/executive/PageShell";
@@ -515,6 +516,13 @@ export default function PedidoVendaList() {
                               <FiCornerUpLeft size={15} />
                             </IconButton>
                           )}
+
+                          <IconButton //adicionar permissoes
+                            title="Expedições / Romaneios"
+                            onClick={() => navigate("/pedidosvenda/expedicoes")}
+                          >
+                            <FiTruck size={15} />
+                          </IconButton>
 
                           <IconButton
                             title="Relatório operacional"

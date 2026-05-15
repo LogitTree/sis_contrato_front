@@ -57,6 +57,7 @@ export default function Sidebar() {
   const movimentacaoItems = [
     { path: "/contratos", label: "Contratos", icon: <FiFileText size={16} />, permission: "CONTRATO_LISTAR" },
     { path: "/pedidosvenda", label: "Vendas de Contrato", icon: <FiTrendingUp size={16} />, permission: "PEDIDO_VENDA_LISTAR" },
+    { path: "/vendadireta", label: "Venda Direta", icon: <FiTrendingUp size={16} />, permission: "PEDIDO_VENDA_DIRETA" },
     { path: "/compras", label: "Compras", icon: <FiShoppingBag size={16} />, permission: "COMPRA_LISTAR" },
   ].filter((item) => hasPermission(item.permission));
 
