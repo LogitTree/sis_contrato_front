@@ -204,7 +204,7 @@ export default function InventarioDetail() {
       const { data } = await api.get("/produtos", {
         params: {
           page: 1,
-          limit: 500,
+          limit: 3000,
           sort: "nome",
           order: "ASC",
         },
