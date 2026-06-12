@@ -7,6 +7,8 @@ import {
   FiTrash2,
   FiX,
   FiUser,
+  FiCheckCircle,
+  FiFilePlus,
 } from "react-icons/fi";
 
 import PageShell from "../../components/executive/PageShell";
@@ -16,6 +18,12 @@ import DataCard from "../../components/executive/DataCard";
 
 import { buttonStyles } from "../../styles/buttons";
 import { filterStyles } from "../../styles/filters";
+
+import {
+  maskCpfCnpj,
+  maskTelefone,
+  onlyDigits,
+} from "../../utils/masks";
 
 import {
   useVendaDiretaCreate,
@@ -35,6 +43,7 @@ export default function VendaDiretaCreate() {
   const {
     codBarraRef,
     qtdRef,
+    empresaAtiva,
 
     creatingVenda,
     searchingProduto,
@@ -86,6 +95,9 @@ export default function VendaDiretaCreate() {
     removerItem,
     finalizarVenda,
     cancelarVenda,
+    criarClienteRapido,
+    novaVenda
+
   } = useVendaDiretaCreate();
 
   const [modalClienteOpen, setModalClienteOpen] = useState(false);
@@ -94,14 +106,22 @@ export default function VendaDiretaCreate() {
   const [modalItemOpen, setModalItemOpen] = useState(false);
 
   const [searchCliente, setSearchCliente] = useState("");
+  const [modalNovoClienteOpen, setModalNovoClienteOpen] = useState(false);
   const [searchForma, setSearchForma] = useState("");
 
   const vendaBloqueada =
     String(venda?.status || "RASCUNHO").toUpperCase() !== "RASCUNHO";
 
+  const clienteSelecionado = clientesOptions.find(
+    (cliente: any) => String(cliente.id) === String(clienteId)
+  );
+
+  const formaSelecionada = formasPagamentoOptions.find(
+    (forma: any) => String(forma.id) === String(formaPagamentoId)
+  );
+
   const clientesFiltrados = useMemo(() => {
     const termo = searchCliente.toLowerCase().trim();
-
     if (!termo) return clientesOptions;
 
     return clientesOptions.filter((cliente: any) =>
@@ -119,7 +139,6 @@ export default function VendaDiretaCreate() {
 
   const formasFiltradas = useMemo(() => {
     const termo = searchForma.toLowerCase().trim();
-
     if (!termo) return formasPagamentoOptions;
 
     return formasPagamentoOptions.filter((forma: any) =>
@@ -128,14 +147,6 @@ export default function VendaDiretaCreate() {
         .includes(termo)
     );
   }, [formasPagamentoOptions, searchForma]);
-
-  const clienteSelecionado = clientesOptions.find(
-    (cliente: any) => String(cliente.id) === String(clienteId)
-  );
-
-  const formaSelecionada = formasPagamentoOptions.find(
-    (forma: any) => String(forma.id) === String(formaPagamentoId)
-  );
 
   async function handleAdicionarItemModal() {
     await adicionarItem();
@@ -164,6 +175,23 @@ export default function VendaDiretaCreate() {
           </button>
         }
       />
+
+      {empresaAtiva && (
+        <div
+          style={{
+            marginBottom: 16,
+            borderRadius: 16,
+            border: "1px solid #dbeafe",
+            background: "#eff6ff",
+            padding: "12px 14px",
+            fontSize: 13,
+            color: "#1d4ed8",
+            fontWeight: 800,
+          }}
+        >
+          Empresa ativa: {empresaAtiva.nome_fantasia || empresaAtiva.razao_social}
+        </div>
+      )}
 
       <div style={summaryGridStyle}>
         <SummaryCard label="Venda" value={vendaId ? `#${vendaId}` : "Nova"} />
@@ -204,7 +232,7 @@ export default function VendaDiretaCreate() {
                   disabled={!canStartVenda}
                   onClick={iniciarVenda}
                 >
-                  {creatingVenda ? "Iniciando..." : "Iniciar venda"}
+                  {creatingVenda ? "Iniciando..." : "Iniciar"}
                 </button>
               ) : (
                 <button
@@ -230,7 +258,7 @@ export default function VendaDiretaCreate() {
 
                 <button
                   type="button"
-                  disabled={!!vendaId}
+                  disabled={!!vendaId || !empresaAtiva}
                   onClick={() => setModalClienteOpen(true)}
                   style={{
                     ...fieldStyle,
@@ -238,8 +266,8 @@ export default function VendaDiretaCreate() {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
-                    cursor: vendaId ? "not-allowed" : "pointer",
-                    background: vendaId ? "#f8fafc" : "#fff",
+                    cursor: vendaId || !empresaAtiva ? "not-allowed" : "pointer",
+                    background: vendaId || !empresaAtiva ? "#f8fafc" : "#fff",
                     textAlign: "left",
                   }}
                 >
@@ -261,7 +289,7 @@ export default function VendaDiretaCreate() {
 
                 <button
                   type="button"
-                  disabled={!!vendaId}
+                  disabled={!!vendaId || !empresaAtiva}
                   onClick={() => setModalFormaOpen(true)}
                   style={{
                     ...fieldStyle,
@@ -269,8 +297,8 @@ export default function VendaDiretaCreate() {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
-                    cursor: vendaId ? "not-allowed" : "pointer",
-                    background: vendaId ? "#f8fafc" : "#fff",
+                    cursor: vendaId || !empresaAtiva ? "not-allowed" : "pointer",
+                    background: vendaId || !empresaAtiva ? "#f8fafc" : "#fff",
                     textAlign: "left",
                   }}
                 >
@@ -293,7 +321,7 @@ export default function VendaDiretaCreate() {
               <textarea
                 value={observacao}
                 onChange={(e) => setObservacao(e.target.value)}
-                disabled={!!vendaId}
+                disabled={!!vendaId || !empresaAtiva}
                 placeholder="Observações da venda"
                 style={{
                   ...fieldStyle,
@@ -303,7 +331,6 @@ export default function VendaDiretaCreate() {
                 }}
               />
             </div>
-
           </DataCard>
 
           <DataCard
@@ -317,7 +344,7 @@ export default function VendaDiretaCreate() {
                 <input
                   ref={codBarraRef}
                   value={codBarra}
-                  disabled={!vendaId || vendaBloqueada}
+                  disabled={!empresaAtiva || !vendaId || vendaBloqueada}
                   onChange={(e) => setCodBarra(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -336,7 +363,9 @@ export default function VendaDiretaCreate() {
                     height: 40,
                     whiteSpace: "nowrap",
                   }}
-                  disabled={!vendaId || vendaBloqueada || searchingProduto}
+                  disabled={
+                    !empresaAtiva || !vendaId || vendaBloqueada || searchingProduto
+                  }
                   onClick={handleBuscarCodigoBarras}
                 >
                   <FiSearch size={15} />
@@ -349,7 +378,7 @@ export default function VendaDiretaCreate() {
 
               <button
                 type="button"
-                disabled={!vendaId || vendaBloqueada}
+                disabled={!empresaAtiva || !vendaId || vendaBloqueada}
                 onClick={() => setModalProdutoOpen(true)}
                 style={{
                   ...fieldStyle,
@@ -357,8 +386,14 @@ export default function VendaDiretaCreate() {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  cursor: !vendaId || vendaBloqueada ? "not-allowed" : "pointer",
-                  background: !vendaId || vendaBloqueada ? "#f8fafc" : "#fff",
+                  cursor:
+                    !empresaAtiva || !vendaId || vendaBloqueada
+                      ? "not-allowed"
+                      : "pointer",
+                  background:
+                    !empresaAtiva || !vendaId || vendaBloqueada
+                      ? "#f8fafc"
+                      : "#fff",
                   textAlign: "left",
                 }}
               >
@@ -513,22 +548,46 @@ export default function VendaDiretaCreate() {
                   <span>{formatMoneyBR(totais.totalVenda)}</span>
                 </div>
 
-                <button
-                  type="button"
+                <div
                   style={{
-                    ...buttonStyles.primary,
-                    width: "100%",
-                    height: 46,
+                    display: "flex",
+                    gap: 10,
                     marginTop: 16,
-                    justifyContent: "center",
-                    fontSize: 15,
                   }}
-                  disabled={!itens.length || finishing || vendaBloqueada}
-                  onClick={finalizarVenda}
                 >
-                  <FiCreditCard size={17} />{" "}
-                  {finishing ? "Finalizando..." : "Finalizar venda"}
-                </button>
+                  {vendaId && (
+                    <button
+                      type="button"
+                      style={{
+                        ...buttonStyles.secondary,
+                        flex: 1,
+                        height: 46,
+                        justifyContent: "center",
+                      }}
+                      onClick={novaVenda}
+                      title="Nova venda"
+                    >
+                      <FiFilePlus size={18} />
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    style={{
+                      ...buttonStyles.primary,
+                      flex: 1,
+                      height: 46,
+                      justifyContent: "center",
+                    }}
+                    disabled={
+                      !empresaAtiva || !itens.length || finishing || vendaBloqueada
+                    }
+                    onClick={finalizarVenda}
+                    title="Finalizar venda"
+                  >
+                    <FiCheckCircle size={18} />
+                  </button>
+                </div>
               </div>
             </div>
           </DataCard>
@@ -544,6 +603,21 @@ export default function VendaDiretaCreate() {
           onClose={() => setModalClienteOpen(false)}
           count={clientesFiltrados.length}
         >
+          <button
+            type="button"
+            style={{
+              ...buttonStyles.primary,
+              width: "100%",
+              justifyContent: "center",
+              marginBottom: 8,
+            }}
+            onClick={() => {
+              setModalClienteOpen(false);
+              setModalNovoClienteOpen(true);
+            }}
+          >
+            <FiPlus size={15} /> Novo cliente
+          </button>
           {clientesFiltrados.map((cliente: any) => (
             <button
               key={cliente.id}
@@ -568,6 +642,23 @@ export default function VendaDiretaCreate() {
             </button>
           ))}
         </SearchModal>
+      )}
+
+      {modalNovoClienteOpen && (
+        <NovoClienteModal
+          onClose={() => setModalNovoClienteOpen(false)}
+          onSave={async (payload) => {
+            const cliente = await criarClienteRapido(payload);
+
+            if (cliente?.id) {
+              setClienteId(String(cliente.id));
+            }
+
+            setModalNovoClienteOpen(false);
+            setModalClienteOpen(false);
+            setSearchCliente("");
+          }}
+        />
       )}
 
       {modalFormaOpen && (
@@ -794,6 +885,164 @@ function SearchModal({
           </div>
 
           <div style={modalListStyle}>{children}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NovoClienteModal({
+  onClose,
+  onSave,
+}: {
+  onClose: () => void;
+  onSave: (payload: any) => Promise<void>;
+}) {
+  const [saving, setSaving] = useState(false);
+
+  const [nome, setNome] = useState("");
+  const [cnpj, setCnpj] = useState("");
+  const [tipo, setTipo] = useState("PRIVADO");
+  const [esfera, setEsfera] = useState("MUNICIPAL");
+  const [telefone, setTelefone] = useState("");
+  const [emailOficial, setEmailOficial] = useState("");
+
+  async function salvar() {
+    if (!nome.trim()) {
+      alert("Informe o nome do cliente.");
+      return;
+    }
+
+    if (!cnpj.trim()) {
+      alert("Informe o CNPJ.");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      await onSave({
+        nome: nome.trim(),
+        cnpj: onlyDigits(cnpj),
+        tipo,
+        esfera,
+        telefone: onlyDigits(telefone) || null,
+        email_oficial: emailOficial.trim() || "inserir@email.com",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={overlayStyle}>
+      <div style={itemModalStyle}>
+        <div style={modalHeaderStyle}>
+          <div>
+            <div style={modalTitleStyle}>Novo cliente</div>
+            <div style={modalSubtitleStyle}>
+              Cadastre rapidamente um cliente para a venda.
+            </div>
+          </div>
+
+          <button type="button" onClick={onClose} style={closeButtonStyle}>
+            <FiX size={16} />
+          </button>
+        </div>
+
+        <div style={{ padding: 18 }}>
+          <div style={{ display: "grid", gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Nome *</label>
+              <input
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+                style={fieldStyle}
+                placeholder="Nome ou razão social"
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>CPF/CNPJ *</label>
+              <input
+                value={cnpj}
+                onChange={(e) => setCnpj(maskCpfCnpj(e.target.value))}
+                style={fieldStyle}
+                placeholder="00.000.000/0000-00"
+              />
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 10,
+              }}
+            >
+              <div>
+                <label style={labelStyle}>Tipo *</label>
+                <select
+                  value={tipo}
+                  onChange={(e) => setTipo(e.target.value)}
+                  style={fieldStyle}
+                >
+                  <option value="PRIVADO">Privado</option>
+                  <option value="PUBLICO">Público</option>
+                  <option value="ONG">ONG</option>
+                  <option value="OUTRO">Outro</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={labelStyle}>Esfera *</label>
+                <select
+                  value={esfera}
+                  onChange={(e) => setEsfera(e.target.value)}
+                  style={fieldStyle}
+                >
+                  <option value="MUNICIPAL">Municipal</option>
+                  <option value="ESTADUAL">Estadual</option>
+                  <option value="FEDERAL">Federal</option>
+                  <option value="PRIVADA">Privada</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label style={labelStyle}>Telefone</label>
+              <input
+                value={telefone}
+                onChange={(e) => setTelefone(maskTelefone(e.target.value))}
+                style={fieldStyle}
+                placeholder="(00) 00000-0000"
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>E-mail</label>
+              <input
+                value={emailOficial}
+                onChange={(e) => setEmailOficial(e.target.value)}
+                style={fieldStyle}
+                placeholder="email@cliente.com"
+              />
+            </div>
+          </div>
+
+          <div style={itemModalActionsStyle}>
+            <button type="button" style={buttonStyles.secondary} onClick={onClose}>
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              style={buttonStyles.primary}
+              disabled={saving}
+              onClick={salvar}
+            >
+              <FiPlus size={15} /> {saving ? "Salvando..." : "Salvar cliente"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

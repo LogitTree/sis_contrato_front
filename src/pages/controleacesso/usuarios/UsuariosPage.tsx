@@ -1,5 +1,8 @@
 import { useMemo, useState } from "react";
-import { FiUserCheck, FiUsers, FiShield } from "react-icons/fi";
+import {
+  FiUserCheck, FiUsers, FiShield, FiKey, FiEdit,
+  FiTrash2, FiBriefcase
+} from "react-icons/fi";
 
 import PageShell from "../../../components/executive/PageShell";
 import PageHeader from "../../../components/executive/PageHeader";
@@ -13,6 +16,8 @@ import { buttonStyles } from "../../../styles/buttons";
 import { useUsuarios } from "./hooks/useUsuarios";
 import UsuarioModal from "./UsuarioModal";
 import { useGruposUsuarios } from "../grupos-usuarios/hooks/useGruposUsuarios";
+import UsuarioEmpresasModal from "./UsuarioEmpresasModal";
+import UsuarioSenhaModal from "./UsuarioSenhaModal";
 
 import type { UsuarioSistema, UsuarioPayload } from "../../../services/controleacesso/usuarioService";
 
@@ -26,7 +31,16 @@ export default function UsuariosPage() {
 
   const { data: grupos = [] } = useGruposUsuarios();
 
+  const [openSenhaModal, setOpenSenhaModal] = useState(false);
+
+  const [usuarioSenha, setUsuarioSenha] =
+    useState<UsuarioSistema | null>(null);
+
   const usuarios = useMemo(() => data || [], [data]);
+
+  const [openEmpresasModal, setOpenEmpresasModal] = useState(false);
+  const [usuarioEmpresas, setUsuarioEmpresas] =
+    useState<UsuarioSistema | null>(null);
 
   const gruposMap = useMemo(() => {
     const map = new Map<number, string>();
@@ -64,6 +78,11 @@ export default function UsuariosPage() {
     setOpenModal(true);
   }
 
+  function handleSenha(item: UsuarioSistema) {
+    setUsuarioSenha(item);
+    setOpenSenhaModal(true);
+  }
+
   async function handleDelete(item: UsuarioSistema) {
     const confirmed = window.confirm(
       `Deseja realmente inativar o usuário "${item.nome}"?`
@@ -72,6 +91,11 @@ export default function UsuariosPage() {
     if (!confirmed) return;
 
     await mutateRemove(item.id);
+  }
+
+  function handleEmpresas(item: UsuarioSistema) {
+    setUsuarioEmpresas(item);
+    setOpenEmpresasModal(true);
   }
 
   async function handleSubmit(values: UsuarioPayload) {
@@ -237,22 +261,43 @@ export default function UsuariosPage() {
                           display: "flex",
                           justifyContent: "flex-end",
                           gap: 8,
+                          alignItems: "center",
                         }}
                       >
                         <button
                           type="button"
-                          style={buttonStyles.secondary}
-                          onClick={() => handleEdit(item)}
+                          style={buttonStyles.icon}
+                          onClick={() => handleEmpresas(item)}
+                          title="Empresas vinculadas"
                         >
-                          Editar
+                          <FiBriefcase size={18} color="#0f766e" />
                         </button>
 
                         <button
                           type="button"
-                          style={buttonStyles.danger}
-                          onClick={() => handleDelete(item)}
+                          style={buttonStyles.icon}
+                          onClick={() => handleEdit(item)}
+                          title="Editar usuário"
                         >
-                          Inativar
+                          <FiEdit size={18} color="#2563eb" />
+                        </button>
+
+                        <button
+                          type="button"
+                          style={buttonStyles.icon}
+                          onClick={() => handleSenha(item)}
+                          title="Alterar senha"
+                        >
+                          <FiKey size={18} color="#ea580c" />
+                        </button>
+
+                        <button
+                          type="button"
+                          style={buttonStyles.icon}
+                          onClick={() => handleDelete(item)}
+                          title="Inativar usuário"
+                        >
+                          <FiTrash2 size={18} color="#dc2626" />
                         </button>
                       </div>
                     </td>
@@ -274,6 +319,24 @@ export default function UsuariosPage() {
           setSelectedItem(null);
         }}
         onSubmit={handleSubmit}
+      />
+
+      <UsuarioEmpresasModal
+        isOpen={openEmpresasModal}
+        usuario={usuarioEmpresas}
+        onClose={() => {
+          setOpenEmpresasModal(false);
+          setUsuarioEmpresas(null);
+        }}
+      />
+
+      <UsuarioSenhaModal
+        isOpen={openSenhaModal}
+        usuario={usuarioSenha}
+        onClose={() => {
+          setOpenSenhaModal(false);
+          setUsuarioSenha(null);
+        }}
       />
     </PageShell>
   );

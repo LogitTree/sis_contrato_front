@@ -41,3 +41,17 @@ export async function removerUsuario(id: number) {
   const response = await api.delete(`/usuario/${id}`);
   return response.data;
 }
+
+export async function alterarSenhaUsuario(
+  usuarioId: number,
+  novaSenha: string
+) {
+  const response = await api.put(
+    `/usuario/${usuarioId}/senha`,
+    {
+      nova_senha: novaSenha,
+    }
+  );
+
+  return response.data;
+}

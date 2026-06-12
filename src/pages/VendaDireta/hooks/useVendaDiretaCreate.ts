@@ -3,16 +3,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 
+import { useAuth } from "../../../contexts/AuthContext";
+
 import {
   adicionarItemVendaDireta,
   buscarProdutosVendaDireta,
   buscarVendaDireta,
   criarVendaDireta,
+  criarClienteVendaDireta,
   finalizarVendaDireta,
   removerItemVendaDireta,
   cancelarVendaDireta,
   listarClientesVendaDireta,
   listarFormasPagamentoVendaDireta,
+  type ClienteVendaDiretaPayload,
   type ProdutoVendaDireta,
   type VendaDireta,
   type VendaDiretaItem,
@@ -46,6 +50,8 @@ export function useVendaDiretaCreate() {
   const codBarraRef = useRef<HTMLInputElement | null>(null);
   const qtdRef = useRef<HTMLInputElement | null>(null);
 
+  const { empresas, empresaAtiva, setEmpresaAtiva } = useAuth();
+
   const [loading, setLoading] = useState(false);
   const [creatingVenda, setCreatingVenda] = useState(false);
   const [searchingProduto, setSearchingProduto] = useState(false);
@@ -66,9 +72,8 @@ export function useVendaDiretaCreate() {
 
   const [codBarra, setCodBarra] = useState("");
   const [searchProduto, setSearchProduto] = useState("");
-  const [produtosEncontrados, setProdutosEncontrados] = useState<
-    ProdutoVendaDireta[]
-  >([]);
+  const [produtosEncontrados, setProdutosEncontrados] =
+    useState<ProdutoVendaDireta[]>([]);
 
   const [produtoSelecionado, setProdutoSelecionado] =
     useState<ProdutoVendaDireta | null>(null);
@@ -83,6 +88,12 @@ export function useVendaDiretaCreate() {
 
   const vendaId = venda?.id ?? null;
 
+  useEffect(() => {
+    if (empresas.length === 1 && !empresaAtiva) {
+      setEmpresaAtiva(empresas[0]);
+    }
+  }, [empresas, empresaAtiva, setEmpresaAtiva]);
+
   async function carregarClientes() {
     try {
       const result = await listarClientesVendaDireta();
@@ -91,6 +102,30 @@ export function useVendaDiretaCreate() {
       console.error(error);
       toast.error("Erro ao carregar clientes.");
       setClientesOptions([]);
+    }
+  }
+
+  async function criarClienteRapido(payload: ClienteVendaDiretaPayload) {
+    try {
+      const cliente = await criarClienteVendaDireta(payload);
+
+      await carregarClientes();
+
+      if (cliente?.id) {
+        setClienteId(String(cliente.id));
+      }
+
+      toast.success("Cliente cadastrado e selecionado.");
+
+      return cliente;
+    } catch (error: any) {
+      console.error(error);
+
+      toast.error(
+        error?.response?.data?.error || "Erro ao cadastrar cliente."
+      );
+
+      throw error;
     }
   }
 
@@ -122,6 +157,9 @@ export function useVendaDiretaCreate() {
   }
 
   async function iniciarVenda() {
+    if (!empresaAtiva) {
+      return toast.error("Selecione a empresa da venda.");
+    }
 
     if (!clienteId) {
       return toast.error("Selecione o cliente/órgão.");
@@ -156,6 +194,27 @@ export function useVendaDiretaCreate() {
     }
   }
 
+  function novaVenda() {
+    setVenda(null);
+    setItens([]);
+
+    setClienteId("");
+    setFormaPagamentoId("");
+    setObservacao("");
+
+    setCodBarra("");
+    setSearchProduto("");
+    setProdutosEncontrados([]);
+    setProdutoSelecionado(null);
+
+    setQtd("1");
+    setPrecoUnitario("");
+    setValorDesconto("");
+    setLotesSelecionados({});
+
+    setTimeout(() => codBarraRef.current?.focus(), 80);
+  }
+
   function selecionarProduto(produto: ProdutoVendaDireta) {
     setProdutoSelecionado(produto);
 
@@ -173,6 +232,11 @@ export function useVendaDiretaCreate() {
     const codigo = codBarra.trim();
 
     if (!codigo) return;
+
+    if (!empresaAtiva) {
+      toast.error("Selecione a empresa da venda.");
+      return;
+    }
 
     if (!vendaId) {
       toast.error("Inicie a venda primeiro.");
@@ -207,6 +271,11 @@ export function useVendaDiretaCreate() {
 
   async function pesquisarProdutos() {
     const termo = searchProduto.trim();
+
+    if (!empresaAtiva) {
+      toast.error("Selecione a empresa da venda.");
+      return;
+    }
 
     if (!vendaId) {
       toast.error("Inicie a venda primeiro.");
@@ -278,9 +347,14 @@ export function useVendaDiretaCreate() {
     return !!venda?.status && String(venda.status).toUpperCase() !== "RASCUNHO";
   }, [venda]);
 
-  const canStartVenda = !creatingVenda && !vendaId;
+  const semEmpresaVinculada = empresas.length === 0;
+  const precisaSelecionarEmpresa = empresas.length > 1 && !empresaAtiva;
+
+  const canStartVenda =
+    !creatingVenda && !vendaId && !!empresaAtiva && !semEmpresaVinculada;
 
   const canAddItem =
+    !!empresaAtiva &&
     !!vendaId &&
     !vendaBloqueada &&
     !!produtoSelecionado &&
@@ -289,6 +363,11 @@ export function useVendaDiretaCreate() {
     !savingItem;
 
   async function adicionarItem() {
+    if (!empresaAtiva) {
+      toast.error("Selecione a empresa da venda.");
+      return;
+    }
+
     if (!vendaId) {
       toast.error("Inicie a venda primeiro.");
       return;
@@ -345,6 +424,11 @@ export function useVendaDiretaCreate() {
   }
 
   async function removerItem(itemId: number) {
+    if (!empresaAtiva) {
+      toast.error("Selecione a empresa da venda.");
+      return;
+    }
+
     if (!vendaId) return;
 
     if (vendaBloqueada) {
@@ -378,6 +462,11 @@ export function useVendaDiretaCreate() {
   }
 
   async function cancelarVenda() {
+    if (!empresaAtiva) {
+      toast.error("Selecione a empresa da venda.");
+      return;
+    }
+
     if (!vendaId) return;
 
     if (vendaBloqueada) {
@@ -406,6 +495,11 @@ export function useVendaDiretaCreate() {
   }
 
   async function finalizarVenda() {
+    if (!empresaAtiva) {
+      toast.error("Selecione a empresa da venda.");
+      return;
+    }
+
     if (!vendaId) return;
 
     if (!itens.length) {
@@ -443,6 +537,7 @@ export function useVendaDiretaCreate() {
     }
   }
 
+
   useEffect(() => {
     carregarClientes();
     carregarFormasPagamento();
@@ -453,6 +548,12 @@ export function useVendaDiretaCreate() {
   return {
     codBarraRef,
     qtdRef,
+
+    empresas,
+    empresaAtiva,
+    setEmpresaAtiva,
+    semEmpresaVinculada,
+    precisaSelecionarEmpresa,
 
     loading,
     creatingVenda,
@@ -514,6 +615,8 @@ export function useVendaDiretaCreate() {
     carregarVenda,
     carregarClientes,
     carregarFormasPagamento,
+    criarClienteRapido,
+    novaVenda
   };
 }
 

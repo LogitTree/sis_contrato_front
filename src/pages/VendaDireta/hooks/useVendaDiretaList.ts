@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 
+import { useAuth } from "../../../contexts/AuthContext";
+
 import {
   listarVendasDiretas,
   type VendaDireta,
@@ -12,6 +14,8 @@ function moneyFromApi(v: any): number {
 }
 
 export function useVendaDiretaList() {
+  const { empresas, empresaAtiva, setEmpresaAtiva } = useAuth();
+
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
@@ -23,7 +27,24 @@ export function useVendaDiretaList() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
 
+  const semEmpresaVinculada = empresas.length === 0;
+  const precisaSelecionarEmpresa = empresas.length > 1 && !empresaAtiva;
+
+  useEffect(() => {
+    if (empresas.length === 1 && !empresaAtiva) {
+      setEmpresaAtiva(empresas[0]);
+    }
+  }, [empresas, empresaAtiva, setEmpresaAtiva]);
+
   async function carregar() {
+    if (!empresaAtiva) {
+      setLoading(false);
+      setVendas([]);
+      setTotal(0);
+      setTotalPages(1);
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -56,7 +77,7 @@ export function useVendaDiretaList() {
 
   useEffect(() => {
     carregar();
-  }, [page, limit]);
+  }, [page, limit, empresaAtiva]);
 
   const resumo = useMemo(() => {
     const totalVendas = vendas.length;
@@ -87,6 +108,12 @@ export function useVendaDiretaList() {
   }, [vendas]);
 
   return {
+    empresas,
+    empresaAtiva,
+    setEmpresaAtiva,
+    semEmpresaVinculada,
+    precisaSelecionarEmpresa,
+
     loading,
 
     search,

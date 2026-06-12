@@ -167,6 +167,7 @@ export default function InventarioDetail() {
 
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [buscaProduto, setBuscaProduto] = useState("");
+  const [mostrarProdutos, setMostrarProdutos] = useState(false);
 
   const [itemForm, setItemForm] = useState({
     produto_id: "",
@@ -377,6 +378,12 @@ export default function InventarioDetail() {
         validade: "",
       }));
     }
+  }
+
+  function selecionarProduto(produto: Produto) {
+    handleProdutoChange(String(produto.id));
+    setBuscaProduto(produto.nome || "");
+    setMostrarProdutos(false);
   }
 
   function resetItemForm() {
@@ -758,17 +765,91 @@ export default function InventarioDetail() {
               <div style={layoutStyles.cardCompact}>
                 <div style={styles.formStack}>
                   <div style={styles.formRow}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 320 }}>
-                      <label style={styles.label}>Buscar produto</label>
-                      <input
-                        type="text"
-                        value={buscaProduto}
-                        onChange={(e) => setBuscaProduto(e.target.value)}
-                        placeholder="Digite nome ou código de barras"
-                        style={{ ...filterStyles.input, height: 38, padding: "0 12px" }}
-                        onFocus={fieldFocusHandlers.onFocus}
-                        onBlur={fieldFocusHandlers.onBlur}
-                      />
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 4,
+                        flex: 1,
+                        minWidth: 420,
+                        position: "relative",
+                      }}
+                    >
+                      <label style={styles.label}>Produto *</label>
+
+                      <div style={productSearchBoxStyle}>
+                        <input
+                          type="text"
+                          value={buscaProduto}
+                          disabled={inventarioBloqueado}
+                          onChange={(e) => {
+                            setBuscaProduto(e.target.value);
+                            setMostrarProdutos(true);
+
+                            if (!e.target.value.trim()) {
+                              updateItemField("produto_id", "");
+                            }
+                          }}
+                          onFocus={() => setMostrarProdutos(true)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                              setMostrarProdutos(false);
+                            }
+
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+
+                              if (produtosFiltrados.length === 1) {
+                                selecionarProduto(produtosFiltrados[0]);
+                              }
+                            }
+                          }}
+                          placeholder="Digite o nome, código de barras ou SKU"
+                          style={productSearchInputStyle}
+                        />
+
+                        {buscaProduto && (
+                          <button
+                            type="button"
+                            style={clearSearchButtonStyle}
+                            onClick={() => {
+                              setBuscaProduto("");
+                              resetItemForm();
+                              setMostrarProdutos(false);
+                            }}
+                          >
+                            <FiX size={14} />
+                          </button>
+                        )}
+                      </div>
+
+                      {mostrarProdutos && buscaProduto.trim().length > 0 && (
+                        <div style={productResultBoxStyle}>
+                          {produtosFiltrados.length === 0 ? (
+                            <div style={productResultEmptyStyle}>
+                              Nenhum produto encontrado.
+                            </div>
+                          ) : (
+                            produtosFiltrados.slice(0, 20).map((produto) => (
+                              <button
+                                key={produto.id}
+                                type="button"
+                                style={productResultItemStyle}
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => selecionarProduto(produto)}
+                              >
+                                <strong>{produto.nome}</strong>
+
+                                <span style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
+                                  Código: {produto.cod_barra || "-"} • Custo médio:{" "}
+                                  {produto.custo_medio ? formatMoney(produto.custo_medio) : "-"}
+                                </span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+
                       <div style={styles.helperLine}>
                         {produtoSelecionado ? (
                           <>
@@ -776,29 +857,9 @@ export default function InventarioDetail() {
                             {produtoSelecionado.nome}
                           </>
                         ) : (
-                          "\u00A0"
+                          "Digite para pesquisar e selecione o produto"
                         )}
                       </div>
-                    </div>
-
-                    <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 320 }}>
-                      <label style={styles.label}>Produto *</label>
-                      <select
-                        value={itemForm.produto_id}
-                        onChange={(e) => handleProdutoChange(e.target.value)}
-                        style={{ ...filterStyles.select, height: 38, padding: "0 12px" }}
-                        onFocus={fieldFocusHandlers.onFocus}
-                        onBlur={fieldFocusHandlers.onBlur}
-                      >
-                        <option value="">Selecione</option>
-                        {produtosFiltrados.map((produto) => (
-                          <option key={produto.id} value={produto.id}>
-                            {produto.nome}
-                            {produto.cod_barra ? ` - ${produto.cod_barra}` : ""}
-                          </option>
-                        ))}
-                      </select>
-                      <div style={styles.helperLine}>{"\u00A0"}</div>
                     </div>
                   </div>
 
@@ -1309,4 +1370,74 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#64748b",
     padding: 24,
   },
+};
+
+const productSearchBoxStyle: React.CSSProperties = {
+  height: 40,
+  border: "1px solid #dbe3ee",
+  borderRadius: 12,
+  padding: "0 10px",
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  background: "#fff",
+};
+
+const productSearchInputStyle: React.CSSProperties = {
+  border: "none",
+  outline: "none",
+  background: "transparent",
+  width: "100%",
+  height: "100%",
+  fontSize: 14,
+  color: "#0f172a",
+};
+
+const clearSearchButtonStyle: React.CSSProperties = {
+  width: 28,
+  height: 28,
+  border: "none",
+  borderRadius: 10,
+  background: "#f1f5f9",
+  color: "#64748b",
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const productResultBoxStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 68,
+  left: 0,
+  right: 0,
+  background: "#fff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 14,
+  boxShadow: "0 18px 45px rgba(15,23,42,0.18)",
+  zIndex: 50,
+  maxHeight: 280,
+  overflowY: "auto",
+  padding: 8,
+};
+
+const productResultItemStyle: React.CSSProperties = {
+  width: "100%",
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+  borderRadius: 12,
+  padding: "10px 12px",
+  textAlign: "left",
+  cursor: "pointer",
+  marginBottom: 8,
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+};
+
+const productResultEmptyStyle: React.CSSProperties = {
+  padding: 18,
+  textAlign: "center",
+  fontSize: 13,
+  color: "#64748b",
 };

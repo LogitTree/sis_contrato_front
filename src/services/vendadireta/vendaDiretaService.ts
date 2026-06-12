@@ -160,3 +160,47 @@ export async function listarFormasPagamentoVendaDireta() {
 
     return response.data?.data || response.data || [];
 }
+
+export async function criarClienteVendaDireta(
+    payload: ClienteVendaDiretaPayload
+) {
+    const response = await api.post("/orgaocontratante", payload);
+
+    return response.data;
+}
+
+export async function imprimirReciboVendaDireta(vendaId: number) {
+    const response = await api.get(`/vendas-diretas/${vendaId}/recibo`, {
+        responseType: "blob",
+    });
+
+    const blob = new Blob([response.data], {
+        type: "application/pdf",
+    });
+
+    const url = window.URL.createObjectURL(blob);
+
+    window.open(url, "_blank", "noopener,noreferrer");
+
+    setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+    }, 60_000);
+}
+
+export type ClienteVendaDiretaPayload = {
+    nome?: string;
+    razao_social?: string;
+    nome_fantasia?: string;
+    documento?: string;
+    cnpj?: string;
+    cpf?: string;
+    telefone?: string;
+    email?: string;
+    endereco?: string;
+    cidade?: string;
+    estado?: string;
+    status?: string;
+    tipo?: string;
+    esfera?: string;
+    email_oficial?: string;
+};

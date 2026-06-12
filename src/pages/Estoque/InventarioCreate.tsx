@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { FiSave } from "react-icons/fi";
 import { toast } from "react-toastify";
+
 import api from "../../api/api";
 
-import { layoutStyles } from "../../styles/layout";
+import PageShell from "../../components/executive/PageShell";
+import PageHeader from "../../components/executive/PageHeader";
+import DataCard from "../../components/executive/DataCard";
+
 import { buttonStyles } from "../../styles/buttons";
-import { fieldFocusHandlers } from "../../styles/focus";
+import { filterStyles } from "../../styles/filters";
 
 type Motivo = {
   id: number;
@@ -17,6 +22,7 @@ export default function InventarioCreate() {
 
   const [loading, setLoading] = useState(false);
   const [loadingMotivos, setLoadingMotivos] = useState(false);
+
   const [motivos, setMotivos] = useState<Motivo[]>([]);
 
   const [form, setForm] = useState({
@@ -36,16 +42,22 @@ export default function InventarioCreate() {
       const { data } = await api.get("/inventario-motivos", {
         params: {
           page: 1,
-          limit: 200,
+          limit: 500,
           ativo: true,
           orderBy: "descricao",
           orderDir: "ASC",
         },
       });
 
-      setMotivos(Array.isArray(data?.data) ? data.data : []);
-    } catch (err) {
-      console.error(err);
+      const rows = Array.isArray(data?.data)
+        ? data.data
+        : Array.isArray(data)
+        ? data
+        : [];
+
+      setMotivos(rows);
+    } catch (error) {
+      console.error(error);
       toast.error("Erro ao carregar motivos");
     } finally {
       setLoadingMotivos(false);
@@ -81,66 +93,98 @@ export default function InventarioCreate() {
     try {
       setLoading(true);
 
-      const payload = {
+      await api.post("/inventario", {
         data_inventario: form.data_inventario,
         motivo_id: Number(form.motivo_id),
         observacao: form.observacao.trim() || null,
-      };
-
-      await api.post("/inventario", payload);
+      });
 
       toast.success("Inventário criado com sucesso");
 
       navigate("/estoque/inventario");
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.response?.data?.error || "Erro ao criar inventário");
+    } catch (error: any) {
+      console.error(error);
+
+      toast.error(
+        error?.response?.data?.error ||
+          "Erro ao criar inventário"
+      );
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div style={layoutStyles.page}>
-      <div style={layoutStyles.header}>
-        <div>
-          <h1 style={layoutStyles.title}>Novo Inventário</h1>
-          <p style={layoutStyles.subtitle}>
-            Abra um inventário para conferência e ajuste posterior do estoque.
-          </p>
-        </div>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Novo Inventário"
+        subtitle="Abra um inventário para conferência e ajuste posterior do estoque."
+        action={
+          <button
+            type="button"
+            style={buttonStyles.secondary}
+            onClick={() => navigate("/estoque/inventario")}
+          >
+            Voltar
+          </button>
+        }
+      />
 
-      <div style={layoutStyles.card}>
+      <DataCard
+        title="Dados do inventário"
+        subtitle="Informe os dados iniciais para abertura do inventário."
+      >
         <form onSubmit={handleSubmit}>
-          <div style={styles.grid}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "220px 1fr",
+              gap: 12,
+              alignItems: "end",
+            }}
+          >
             <div>
-              <label style={styles.label}>Data do inventário *</label>
+              <label style={labelStyle}>
+                Data do inventário
+              </label>
+
               <input
                 type="date"
                 value={form.data_inventario}
-                onChange={(e) => updateField("data_inventario", e.target.value)}
-                style={styles.input}
-                onFocus={fieldFocusHandlers.onFocus}
-                onBlur={fieldFocusHandlers.onBlur}
+                onChange={(e) =>
+                  updateField(
+                    "data_inventario",
+                    e.target.value
+                  )
+                }
+                style={fieldStyle}
               />
             </div>
 
             <div>
-              <label style={styles.label}>Motivo *</label>
+              <label style={labelStyle}>
+                Motivo
+              </label>
+
               <select
                 value={form.motivo_id}
-                onChange={(e) => updateField("motivo_id", e.target.value)}
-                style={styles.input}
+                onChange={(e) =>
+                  updateField("motivo_id", e.target.value)
+                }
                 disabled={loadingMotivos}
-                onFocus={fieldFocusHandlers.onFocus}
-                onBlur={fieldFocusHandlers.onBlur}
+                style={fieldStyle}
               >
                 <option value="">
-                  {loadingMotivos ? "Carregando motivos..." : "Selecione"}
+                  {loadingMotivos
+                    ? "Carregando..."
+                    : "Selecione"}
                 </option>
+
                 {motivos.map((motivo) => (
-                  <option key={motivo.id} value={motivo.id}>
+                  <option
+                    key={motivo.id}
+                    value={motivo.id}
+                  >
                     {motivo.descricao}
                   </option>
                 ))}
@@ -148,78 +192,66 @@ export default function InventarioCreate() {
             </div>
           </div>
 
-          <div style={{ marginTop: 18 }}>
-            <label style={styles.label}>Observação</label>
+          <div style={{ marginTop: 12 }}>
+            <label style={labelStyle}>
+              Observação
+            </label>
+
             <textarea
               value={form.observacao}
-              onChange={(e) => updateField("observacao", e.target.value)}
-              rows={5}
+              onChange={(e) =>
+                updateField(
+                  "observacao",
+                  e.target.value
+                )
+              }
               placeholder="Observações gerais do inventário"
-              style={styles.textarea}
-              onFocus={fieldFocusHandlers.onFocus}
-              onBlur={fieldFocusHandlers.onBlur}
+              style={{
+                ...fieldStyle,
+                height: 100,
+                resize: "vertical",
+                paddingTop: 10,
+              }}
             />
           </div>
 
-          <div style={styles.footer}>
+          <div
+            style={{
+              marginTop: 16,
+              display: "flex",
+              justifyContent: "flex-end",
+            }}
+          >
             <button
-              type="button"
-              style={buttonStyles.secondary}
-              onClick={() => navigate("/estoque/inventario")}
+              type="submit"
+              style={buttonStyles.primary}
               disabled={loading}
             >
-              Voltar
-            </button>
+              <FiSave size={15} />
 
-            <button type="submit" style={buttonStyles.primary} disabled={loading}>
-              {loading ? "Salvando..." : "Criar inventário"}
+              {loading
+                ? " Salvando..."
+                : " Criar inventário"}
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </DataCard>
+    </PageShell>
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-    gap: 16,
-  },
-  label: {
-    display: "block",
-    marginBottom: 6,
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#334155",
-  },
-  input: {
-    width: "100%",
-    height: 42,
-    borderRadius: 10,
-    border: "1px solid #dbe2ea",
-    padding: "0 12px",
-    background: "#fff",
-    fontSize: 14,
-    outline: "none",
-    boxSizing: "border-box",
-  },
-  textarea: {
-    width: "100%",
-    borderRadius: 10,
-    border: "1px solid #dbe2ea",
-    padding: 12,
-    background: "#fff",
-    fontSize: 14,
-    outline: "none",
-    boxSizing: "border-box",
-    resize: "vertical",
-  },
-  footer: {
-    marginTop: 22,
-    display: "flex",
-    justifyContent: "flex-end",
-    gap: 10,
-  },
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#374151",
+  marginBottom: 6,
+};
+
+const fieldStyle: React.CSSProperties = {
+  ...filterStyles.input,
+  width: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
+  height: 40,
 };

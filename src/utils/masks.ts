@@ -102,3 +102,25 @@ export function formatarDataBR(data?: string | null) {
 
   return new Date(data).toLocaleDateString('pt-BR');
 }
+
+export function onlyDigits(value?: string | null) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+export function maskCPF(value: string) {
+  return onlyDigits(value)
+    .replace(/^(\d{3})(\d)/, '$1.$2')
+    .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1-$2')
+    .slice(0, 14);
+}
+
+export function maskCpfCnpj(value: string) {
+  const digits = onlyDigits(value).slice(0, 14);
+
+  if (digits.length <= 11) {
+    return maskCPF(digits);
+  }
+
+  return maskCNPJ(digits);
+}

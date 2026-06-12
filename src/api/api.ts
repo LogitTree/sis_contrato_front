@@ -1,5 +1,9 @@
 import axios from "axios";
 
+const TOKEN_KEY = "@contratos:token";
+const USER_KEY = "@contratos:user";
+const EMPRESA_ATIVA_KEY = "@contratos:empresa_ativa";
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_SYSTEM_ENDPOINT,
   headers: {
@@ -15,10 +19,21 @@ export function setAuthToken(token: string | null) {
   }
 }
 
+export function setEmpresaAtivaHeader(empresaId: number | null) {
+  if (empresaId) {
+    api.defaults.headers.common["x-empresa-id"] = String(empresaId);
+  } else {
+    delete api.defaults.headers.common["x-empresa-id"];
+  }
+}
+
 export function logout() {
-  localStorage.removeItem("token");
-  localStorage.removeItem("usuario");
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(EMPRESA_ATIVA_KEY);
+
   setAuthToken(null);
+  setEmpresaAtivaHeader(null);
 
   if (window.location.pathname !== "/login") {
     window.location.href = "/login";
@@ -26,10 +41,25 @@ export function logout() {
 }
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
+  const token = localStorage.getItem(TOKEN_KEY);
+  const empresaAtiva = localStorage.getItem(EMPRESA_ATIVA_KEY);
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  if (empresaAtiva) {
+    try {
+      const empresa = JSON.parse(empresaAtiva);
+
+      if (empresa?.id) {
+        config.headers["x-empresa-id"] = String(empresa.id);
+      }
+    } catch (error) {
+      console.error("Erro ao recuperar empresa ativa:", error);
+      localStorage.removeItem(EMPRESA_ATIVA_KEY);
+      setEmpresaAtivaHeader(null);
+    }
   }
 
   return config;

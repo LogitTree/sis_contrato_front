@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 
+import { useAuth } from "../../../contexts/AuthContext";
+
 import {
   buscarVendaDireta,
   cancelarVendaDireta,
@@ -35,6 +37,8 @@ function moneyFromApi(v: any): number {
 }
 
 export function useVendaDiretaEdit(vendaId: number) {
+  const { empresas, empresaAtiva, setEmpresaAtiva } = useAuth();
+
   const [loading, setLoading] = useState(true);
   const [finishing, setFinishing] = useState(false);
   const [removingItemId, setRemovingItemId] = useState<number | null>(null);
@@ -46,8 +50,24 @@ export function useVendaDiretaEdit(vendaId: number) {
     Record<string | number, number>
   >({});
 
+  const semEmpresaVinculada = empresas.length === 0;
+  const precisaSelecionarEmpresa = empresas.length > 1 && !empresaAtiva;
+
+  useEffect(() => {
+    if (empresas.length === 1 && !empresaAtiva) {
+      setEmpresaAtiva(empresas[0]);
+    }
+  }, [empresas, empresaAtiva, setEmpresaAtiva]);
+
   async function carregarVenda() {
     if (!vendaId) return;
+
+    if (!empresaAtiva) {
+      setLoading(false);
+      setVenda(null);
+      setItens([]);
+      return;
+    }
 
     setLoading(true);
 
@@ -68,7 +88,7 @@ export function useVendaDiretaEdit(vendaId: number) {
 
   useEffect(() => {
     carregarVenda();
-  }, [vendaId]);
+  }, [vendaId, empresaAtiva]);
 
   const vendaBloqueada = useMemo(() => {
     return !!venda?.status && String(venda.status).toUpperCase() !== "RASCUNHO";
@@ -105,7 +125,17 @@ export function useVendaDiretaEdit(vendaId: number) {
   }
 
   async function removerItem(itemId: number) {
+    if (!empresaAtiva) {
+      toast.error("Selecione a empresa da venda.");
+      return;
+    }
+
     if (!vendaId) return;
+
+    if (vendaBloqueada) {
+      toast.error("Esta venda não permite remover itens.");
+      return;
+    }
 
     if (!window.confirm("Remover este item da venda?")) return;
 
@@ -126,10 +156,20 @@ export function useVendaDiretaEdit(vendaId: number) {
   }
 
   async function finalizarVenda() {
+    if (!empresaAtiva) {
+      toast.error("Selecione a empresa da venda.");
+      return;
+    }
+
     if (!vendaId) return;
 
     if (!itens.length) {
       toast.error("Adicione pelo menos um item para finalizar.");
+      return;
+    }
+
+    if (vendaBloqueada) {
+      toast.error("Esta venda já foi finalizada ou cancelada.");
       return;
     }
 
@@ -159,7 +199,17 @@ export function useVendaDiretaEdit(vendaId: number) {
   }
 
   async function cancelarVenda() {
+    if (!empresaAtiva) {
+      toast.error("Selecione a empresa da venda.");
+      return;
+    }
+
     if (!vendaId) return;
+
+    if (vendaBloqueada) {
+      toast.error("Esta venda já foi finalizada ou cancelada.");
+      return;
+    }
 
     if (!window.confirm("Cancelar esta venda?")) return;
 
@@ -182,6 +232,12 @@ export function useVendaDiretaEdit(vendaId: number) {
   }
 
   return {
+    empresas,
+    empresaAtiva,
+    setEmpresaAtiva,
+    semEmpresaVinculada,
+    precisaSelecionarEmpresa,
+
     loading,
     finishing,
     removingItemId,
