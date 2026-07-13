@@ -205,7 +205,7 @@ export default function InventarioDetail() {
         params: {
           page: 1,
           limit: 3000,
-          sort: "nome",
+          sort: "nome", 
           order: "ASC",
         },
       });

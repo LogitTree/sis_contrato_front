@@ -1,5 +1,7 @@
 // src/pages/Compras/List.tsx
 
+import { useMemo, useState } from "react";
+
 import {
   FiChevronLeft,
   FiChevronRight,
@@ -12,6 +14,7 @@ import {
   FiTrash2,
   FiXCircle,
   FiRotateCcw,
+  FiX,
 } from "react-icons/fi";
 
 import PageShell from "../../components/executive/PageShell";
@@ -26,6 +29,26 @@ import {
   comprasListUtils,
   useComprasList,
 } from "./hooks/useComprasList";
+
+
+function normalizeText(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function getStatusLabel(status?: string | null) {
+  const normalized = String(status || "").toUpperCase();
+
+  if (normalized === "ABERTA") return "Aberta";
+  if (normalized === "PARCIALMENTE_RECEBIDA") return "Parcial";
+  if (normalized === "RECEBIDA") return "Recebida";
+  if (normalized === "CANCELADA") return "Cancelada";
+
+  return String(status || "-").replaceAll("_", " ");
+}
 
 export default function ComprasList() {
   const {
@@ -81,6 +104,56 @@ export default function ComprasList() {
     updateParcelaFinanceira,
   } = useComprasList();
 
+  const [fornecedorBusca, setFornecedorBusca] = useState("");
+  const [fornecedorDropdownOpen, setFornecedorDropdownOpen] = useState(false);
+
+  const fornecedorFiltroSelecionado = useMemo(() => {
+    const id = Number(filtroFornecedorId);
+    if (!id) return null;
+
+    return (
+      fornecedoresOptions.find(
+        (fornecedor) => Number(fornecedor.id) === id
+      ) || null
+    );
+  }, [filtroFornecedorId, fornecedoresOptions]);
+
+  const fornecedoresFiltrados = useMemo(() => {
+    const termo = normalizeText(fornecedorBusca);
+
+    const lista = [...fornecedoresOptions].sort((a, b) =>
+      String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR")
+    );
+
+    if (!termo) return lista.slice(0, 20);
+
+    return lista
+      .filter((fornecedor: any) =>
+        [
+          fornecedor.id,
+          fornecedor.nome,
+          fornecedor.razao_social,
+          fornecedor.nome_fantasia,
+          fornecedor.cnpj,
+          fornecedor.documento,
+        ].some((campo) => normalizeText(campo).includes(termo))
+      )
+      .slice(0, 30);
+  }, [fornecedorBusca, fornecedoresOptions]);
+
+  function selecionarFornecedorFiltro(fornecedor: any) {
+    setFiltroFornecedorId(String(fornecedor.id));
+    setFornecedorBusca(fornecedor.nome || "");
+    setFornecedorDropdownOpen(false);
+  }
+
+  function limparFornecedorFiltro() {
+    setFiltroFornecedorId("");
+    setFornecedorBusca("");
+    setFornecedorDropdownOpen(false);
+  }
+
+
   return (
     <PageShell>
       <PageHeader
@@ -133,27 +206,117 @@ export default function ComprasList() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "2fr 180px 160px 160px 1fr",
+            gridTemplateColumns: "minmax(320px, 2.4fr) 170px 150px 150px auto",
             gap: 12,
             alignItems: "end",
           }}
         >
-          <div>
+          <div style={autocompleteContainerStyle}>
             <label style={labelStyle}>Fornecedor</label>
-            <select
-              value={filtroFornecedorId}
-              onChange={(e) => setFiltroFornecedorId(e.target.value)}
-              style={fieldStyle}
-              disabled={loading || deletingId !== null}
-            >
-              <option value="">Todos</option>
 
-              {fornecedoresOptions.map((f) => (
-                <option key={f.id} value={String(f.id)}>
-                  {f.nome}
-                </option>
-              ))}
-            </select>
+            <div
+              style={{
+                ...autocompleteBoxStyle,
+                background:
+                  loading || deletingId !== null ? "#f8fafc" : "#ffffff",
+              }}
+            >
+              <FiSearch size={16} color="#64748b" />
+
+              <input
+                value={
+                  fornecedorBusca ||
+                  fornecedorFiltroSelecionado?.nome ||
+                  ""
+                }
+                disabled={loading || deletingId !== null}
+                onChange={(event) => {
+                  const value = event.target.value;
+
+                  setFornecedorBusca(value);
+                  setFornecedorDropdownOpen(true);
+
+                  if (
+                    normalizeText(value) !==
+                    normalizeText(fornecedorFiltroSelecionado?.nome)
+                  ) {
+                    setFiltroFornecedorId("");
+                  }
+                }}
+                onFocus={() => setFornecedorDropdownOpen(true)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setFornecedorDropdownOpen(false);
+                  }
+
+                  if (
+                    event.key === "Enter" &&
+                    fornecedoresFiltrados.length === 1
+                  ) {
+                    event.preventDefault();
+                    selecionarFornecedorFiltro(fornecedoresFiltrados[0]);
+                  }
+                }}
+                placeholder="Nome, CNPJ ou código"
+                style={autocompleteInputStyle}
+              />
+
+              {(fornecedorBusca || filtroFornecedorId) &&
+                !loading &&
+                deletingId === null && (
+                  <button
+                    type="button"
+                    title="Limpar fornecedor"
+                    style={clearSearchButtonStyle}
+                    onClick={limparFornecedorFiltro}
+                  >
+                    <FiX size={14} />
+                  </button>
+                )}
+            </div>
+
+            {fornecedorDropdownOpen &&
+              !loading &&
+              deletingId === null && (
+                <div style={autocompleteResultsStyle}>
+                  {fornecedoresFiltrados.length === 0 ? (
+                    <div style={autocompleteEmptyStyle}>
+                      Nenhum fornecedor encontrado.
+                    </div>
+                  ) : (
+                    fornecedoresFiltrados.map((fornecedor: any) => (
+                      <button
+                        key={fornecedor.id}
+                        type="button"
+                        style={autocompleteItemStyle}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() =>
+                          selecionarFornecedorFiltro(fornecedor)
+                        }
+                      >
+                        <div style={autocompleteItemHeaderStyle}>
+                          <strong style={autocompleteItemNameStyle}>
+                            {fornecedor.nome ||
+                              fornecedor.razao_social ||
+                              `Fornecedor #${fornecedor.id}`}
+                          </strong>
+
+                          <span style={autocompleteItemIdStyle}>
+                            #{fornecedor.id}
+                          </span>
+                        </div>
+
+                        <div style={autocompleteItemDetailStyle}>
+                          {fornecedor.cnpj ||
+                            fornecedor.documento ||
+                            fornecedor.nome_fantasia ||
+                            "Sem documento informado"}
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
           </div>
 
           <div>
@@ -245,11 +408,14 @@ export default function ComprasList() {
         <div
           style={{
             overflowX: "auto",
+            overflowY: "auto",
             border: "1px solid #e5e7eb",
             borderRadius: 18,
+            minHeight: 470,
+            maxHeight: 470,
           }}
         >
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <table style={{ width: "100%", minWidth: 1280, borderCollapse: "collapse", tableLayout: "fixed" }}>
             <thead style={{ background: "#f8fafc" }}>
               <tr>
                 <HeaderCell
@@ -265,6 +431,7 @@ export default function ComprasList() {
                   active={orderBy === "fornecedor_id"}
                   dir={orderDir}
                   onClick={() => handleSort("fornecedor_id")}
+                  width={390}
                 />
 
                 <HeaderCell
@@ -272,16 +439,16 @@ export default function ComprasList() {
                   active={orderBy === "data_pedido"}
                   dir={orderDir}
                   onClick={() => handleSort("data_pedido")}
-                  width={120}
+                  width={96}
                 />
 
-                <th style={{ ...thStyle, textAlign: "right" }}>Total</th>
+                <th style={{ ...thStyle, textAlign: "right", width: 128 }}>Total</th>
 
-                <th style={{ ...thStyle, textAlign: "center" }}>
+                <th style={{ ...thStyle, textAlign: "center", width: 150 }}>
                   Recebimento
                 </th>
 
-                <th style={{ ...thStyle, textAlign: "center" }}>
+                <th style={{ ...thStyle, textAlign: "center", width: 105 }}>
                   Financeiro
                 </th>
 
@@ -290,10 +457,10 @@ export default function ComprasList() {
                   active={orderBy === "status"}
                   dir={orderDir}
                   onClick={() => handleSort("status")}
-                  width={170}
+                  width={120}
                 />
 
-                <th style={{ ...thStyle, textAlign: "right", width: 190 }}>
+                <th style={{ ...thStyle, textAlign: "right", width: 205 }}>
                   Ações
                 </th>
               </tr>
@@ -324,6 +491,15 @@ export default function ComprasList() {
                     fornecedoresMap.get(fornecedorId)?.nome ||
                     (fornecedorId ? `Fornecedor #${fornecedorId}` : "-");
 
+                  const fornecedorDocumento =
+                    row?.fornecedor?.cnpj ||
+                    row?.fornecedor?.documento ||
+                    row?.Fornecedor?.cnpj ||
+                    row?.Fornecedor?.documento ||
+                    (fornecedoresMap.get(fornecedorId) as any)?.cnpj ||
+                    (fornecedoresMap.get(fornecedorId) as any)?.documento ||
+                    "";
+
                   const totalCompra = comprasListUtils.getTotalCompra(row);
                   const recebimento = comprasListUtils.getResumoRecebimento(row);
                   const status = String(row.status || "").toUpperCase();
@@ -348,6 +524,16 @@ export default function ComprasList() {
                         borderTop: "1px solid #e5e7eb",
                         background: index % 2 === 0 ? "#fff" : "#f8fafc",
                         opacity: isDeleting ? 0.65 : 1,
+                        transition: "background 0.15s ease",
+                      }}
+                      onMouseEnter={(event) => {
+                        if (!isDeleting) {
+                          event.currentTarget.style.background = "#eff6ff";
+                        }
+                      }}
+                      onMouseLeave={(event) => {
+                        event.currentTarget.style.background =
+                          index % 2 === 0 ? "#fff" : "#f8fafc";
                       }}
                     >
                       <td style={tdStyle}>
@@ -359,14 +545,16 @@ export default function ComprasList() {
                           {fornecedorNome}
                         </div>
 
-                        {fornecedorId ? (
-                          <div style={subTextStyle}>
-                            Fornecedor #{fornecedorId}
-                          </div>
-                        ) : null}
+                        <div style={subTextStyle}>
+                          {fornecedorDocumento
+                            ? fornecedorDocumento
+                            : fornecedorId
+                              ? `Código #${fornecedorId}`
+                              : "Sem identificação"}
+                        </div>
                       </td>
 
-                      <td style={tdStyle}>
+                      <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>
                         {comprasListUtils.formatDateBR(row.data_pedido)}
                       </td>
 
@@ -377,7 +565,7 @@ export default function ComprasList() {
                       </td>
 
                       <td style={tdStyle}>
-                        <div style={{ minWidth: 150 }}>
+                        <div style={{ width: 126, margin: "0 auto" }}>
                           <div
                             style={{
                               display: "flex",
@@ -449,7 +637,7 @@ export default function ComprasList() {
                             ...comprasListUtils.statusStyle(row.status),
                           }}
                         >
-                          {String(row.status || "-").replaceAll("_", " ")}
+                          {getStatusLabel(row.status)}
                         </span>
                       </td>
 
@@ -458,7 +646,8 @@ export default function ComprasList() {
                           style={{
                             display: "flex",
                             justifyContent: "flex-end",
-                            gap: 8,
+                            gap: 6,
+                            flexWrap: "nowrap",
                           }}
                         >
                           <button
@@ -501,7 +690,7 @@ export default function ComprasList() {
                               display: "flex",
                               alignItems: "center",
                               justifyContent: "flex-end",
-                              gap: 8,
+                              gap: 6,
                             }}
                           >
                             <button
@@ -984,6 +1173,10 @@ const thStyle: React.CSSProperties = {
   letterSpacing: 0.5,
   color: "#64748b",
   whiteSpace: "nowrap",
+  position: "sticky",
+  top: 0,
+  zIndex: 2,
+  background: "#f8fafc",
 };
 
 const tdStyle: React.CSSProperties = {
@@ -1014,9 +1207,9 @@ const emptyStyle: React.CSSProperties = {
 };
 
 const iconButtonStyle: React.CSSProperties = {
-  width: 34,
-  height: 34,
-  borderRadius: 12,
+  width: 32,
+  height: 32,
+  borderRadius: 10,
   border: "1px solid #e5e7eb",
   background: "#ffffff",
   color: "#334155",
@@ -1034,6 +1227,109 @@ const infoLabelStyle: React.CSSProperties = {
   letterSpacing: 0.4,
 };
 
+
+const autocompleteContainerStyle: React.CSSProperties = {
+  position: "relative",
+  minWidth: 0,
+};
+
+const autocompleteBoxStyle: React.CSSProperties = {
+  width: "100%",
+  height: 40,
+  border: "1px solid #dbe3ee",
+  borderRadius: 12,
+  padding: "0 10px",
+  boxSizing: "border-box",
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+};
+
+const autocompleteInputStyle: React.CSSProperties = {
+  width: "100%",
+  height: "100%",
+  minWidth: 0,
+  border: "none",
+  outline: "none",
+  background: "transparent",
+  color: "#0f172a",
+  fontSize: 14,
+};
+
+const clearSearchButtonStyle: React.CSSProperties = {
+  width: 28,
+  height: 28,
+  border: "none",
+  borderRadius: 9,
+  background: "#f1f5f9",
+  color: "#64748b",
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flexShrink: 0,
+};
+
+const autocompleteResultsStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 68,
+  left: 0,
+  right: 0,
+  zIndex: 100,
+  maxHeight: 320,
+  overflowY: "auto",
+  padding: 8,
+  border: "1px solid #e5e7eb",
+  borderRadius: 16,
+  background: "#fff",
+  boxShadow: "0 18px 48px rgba(15,23,42,0.18)",
+};
+
+const autocompleteItemStyle: React.CSSProperties = {
+  width: "100%",
+  marginBottom: 7,
+  padding: "11px 12px",
+  border: "1px solid #e5e7eb",
+  borderRadius: 13,
+  background: "#fff",
+  cursor: "pointer",
+  textAlign: "left",
+};
+
+const autocompleteItemHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 10,
+};
+
+const autocompleteItemNameStyle: React.CSSProperties = {
+  color: "#0f172a",
+  fontSize: 13,
+  lineHeight: 1.35,
+};
+
+const autocompleteItemIdStyle: React.CSSProperties = {
+  color: "#94a3b8",
+  fontSize: 11,
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const autocompleteItemDetailStyle: React.CSSProperties = {
+  marginTop: 5,
+  color: "#64748b",
+  fontSize: 11,
+  fontWeight: 700,
+};
+
+const autocompleteEmptyStyle: React.CSSProperties = {
+  padding: 22,
+  textAlign: "center",
+  color: "#64748b",
+  fontSize: 13,
+};
+
 const overlayStyle: React.CSSProperties = {
   position: "fixed",
   inset: 0,
@@ -1045,11 +1341,13 @@ const overlayStyle: React.CSSProperties = {
 };
 
 const modalStyle: React.CSSProperties = {
-  width: 680,
+  width: 860,
   maxWidth: "96vw",
+  maxHeight: "92vh",
   background: "#fff",
   borderRadius: 24,
-  overflow: "hidden",
+  overflowY: "auto",
+  overflowX: "hidden",
   boxShadow: "0 25px 60px rgba(0,0,0,0.25)",
 };
 

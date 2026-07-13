@@ -25,6 +25,8 @@ export type CompraRow = {
     nome?: string;
     razao_social?: string;
     nome_fantasia?: string;
+    cnpj?: string;
+    documento?: string;
   };
 
   Fornecedor?: {
@@ -32,6 +34,8 @@ export type CompraRow = {
     nome?: string;
     razao_social?: string;
     nome_fantasia?: string;
+    cnpj?: string;
+    documento?: string;
   };
 
   itens?: any[];
