@@ -229,8 +229,8 @@ export function useCompraEdit() {
 
   async function loadCombos() {
     const [resFornecedores, resProdutos] = await Promise.all([
-      api.get("/fornecedores", { params: { page: 1, limit: 1000 } }),
-      api.get("/produtos", { params: { page: 1, limit: 2000 } }),
+      api.get("/fornecedores", { params: { page: 1, limit: 100000 } }),
+      api.get("/produtos", { params: { page: 1, limit: 100000 } }),
     ]);
 
     const fornecedoresData = pickListArray(resFornecedores.data).map((f: any) => ({
