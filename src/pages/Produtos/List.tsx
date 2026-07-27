@@ -5,6 +5,7 @@ import {
   FiChevronLeft,
   FiChevronRight,
   FiEdit,
+  FiLayers,
   FiPackage,
   FiPlus,
   FiSearch,
@@ -26,6 +27,7 @@ import { buttonStyles } from "../../styles/buttons";
 import { filterStyles } from "../../styles/filters";
 
 import ProdutoEmpresasModal from "./ProdutoEmpresasModal";
+import ImportarProdutosModal from "./ ImportarProdutosModal";
 
 export default function ProdutosList() {
   const navigate = useNavigate();
@@ -35,6 +37,8 @@ export default function ProdutosList() {
 
   const [openEmpresasModal, setOpenEmpresasModal] = useState(false);
   const [produtoEmpresas, setProdutoEmpresas] = useState<Produto | null>(null);
+
+  const [openImportacaoModal, setOpenImportacaoModal] = useState(false);
 
   const [filtroNome, setFiltroNome] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
@@ -153,14 +157,27 @@ export default function ProdutosList() {
         title="Produtos"
         subtitle="Gerencie produtos, grupos, preços de referência e vínculo com empresas."
         action={
-          <button
-            type="button"
-            style={buttonStyles.primary}
-            onClick={() => navigate("/produtos/novo")}
-            disabled={loading}
-          >
-            <FiPlus size={15} /> Novo produto
-          </button>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              type="button"
+              style={buttonStyles.secondary}
+              onClick={() => setOpenImportacaoModal(true)}
+              disabled={loading}
+            >
+              <FiLayers size={15} />
+              Importar por Grupo
+            </button>
+
+            <button
+              type="button"
+              style={buttonStyles.primary}
+              onClick={() => navigate("/produtos/novo")}
+              disabled={loading}
+            >
+              <FiPlus size={15} />
+              Novo Produto
+            </button>
+          </div>
         }
       />
 
@@ -288,8 +305,6 @@ export default function ProdutosList() {
                   Nome {orderBy === "nome" && (orderDir === "ASC" ? "▲" : "▼")}
                 </th>
 
-                <th style={{ ...thStyle, width: 70 }}>ID</th>
-                <th style={{ ...thStyle, width: "46%" }}>Produto</th>
                 <th style={{ ...thStyle, width: "24%" }}>Características</th>
                 <th style={{ ...thStyle, width: 120, textAlign: "right" }}>Preço Ref.</th>
                 <th style={{ ...thStyle, width: 120, textAlign: "right" }}>Custo Médio</th>
@@ -442,6 +457,15 @@ export default function ProdutosList() {
         onClose={() => {
           setOpenEmpresasModal(false);
           setProdutoEmpresas(null);
+        }}
+      />
+
+      <ImportarProdutosModal
+        isOpen={openImportacaoModal}
+        onClose={() => setOpenImportacaoModal(false)}
+        onImported={() => {
+          setPage(1);
+          carregarProdutos();
         }}
       />
     </PageShell>

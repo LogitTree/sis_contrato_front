@@ -367,7 +367,11 @@ export function useComprasList() {
 
     function updateParcelaFinanceira(
         parcela: number,
-        field: "numero_documento" | "anexo_nome" | "anexo_file",
+        field:
+            | "data_vencimento"
+            | "numero_documento"
+            | "anexo_nome"
+            | "anexo_file",
         value: string | File | null
     ) {
         setParcelasFinanceiras((old) =>

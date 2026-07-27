@@ -994,7 +994,24 @@ export default function ComprasList() {
                         </td>
 
                         <td style={tdStyle}>
-                          {comprasListUtils.formatDateBR(p.data_vencimento)}
+                          <input
+                            type="date"
+                            value={p.data_vencimento}
+                            onChange={(e) =>
+                              updateParcelaFinanceira(
+                                p.parcela,
+                                "data_vencimento",
+                                e.target.value
+                              )
+                            }
+                            disabled={financeiroSaving}
+                            style={{
+                              ...fieldStyle,
+                              height: 34,
+                              fontSize: 12,
+                              minWidth: 140,
+                            }}
+                          />
                         </td>
 
                         <td style={tdMoneyStyle}>

@@ -177,17 +177,48 @@ export default function ProdutoCreate() {
      Load Subgrupos
   ========================= */
   useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      subgrupo_id: "",
+    }));
+
     if (!form.grupo_id) {
       setSubgrupos([]);
+      setLoadingSubgrupos(false);
       return;
     }
 
-    setLoadingSubgrupos(true);
-    api
-      .get("/subgrupos", { params: { grupo_id: Number(form.grupo_id) } })
-      .then((res) => setSubgrupos(Array.isArray(res.data) ? res.data : []))
-      .catch(() => setSubgrupos([]))
-      .finally(() => setLoadingSubgrupos(false));
+    async function carregarSubgrupos() {
+      setLoadingSubgrupos(true);
+      setSubgrupos([]);
+
+      try {
+        const res = await api.get("/subgrupos", {
+          params: {
+            grupo_id: Number(form.grupo_id),
+            ativo: true,
+            page: 1,
+            limit: 1000,
+            orderBy: "nome",
+            orderDir: "ASC",
+          },
+        });
+
+        const rows = Array.isArray(res.data)
+          ? res.data
+          : res.data?.data || res.data?.rows || [];
+
+        setSubgrupos(Array.isArray(rows) ? rows : []);
+      } catch (error) {
+        console.error(error);
+        toast.error("Erro ao carregar subgrupos");
+        setSubgrupos([]);
+      } finally {
+        setLoadingSubgrupos(false);
+      }
+    }
+
+    carregarSubgrupos();
   }, [form.grupo_id]);
 
   /* =========================

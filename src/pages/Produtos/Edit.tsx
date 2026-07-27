@@ -8,9 +8,6 @@ import api from "../../api/api";
 
 import { toast } from "react-toastify";
 
-/* =========================
-   Types
-========================= */
 type Grupo = { id: number; nome: string };
 type Subgrupo = { id: number; nome: string };
 
@@ -18,24 +15,16 @@ type ProdutoForm = {
   nome: string;
   descricao: string;
   unidade: string;
-
   grupo_id: string;
   subgrupo_id: string;
-
-  // dígitos (centavos) como string: "641" => R$ 6,41
   preco_referencia: string;
   custo_medio: string;
   ult_custo: string;
-
   estoque_min: string;
   cod_barra: string;
-
   ativo: boolean;
 };
 
-/* =========================
-   Money helpers (mask)
-========================= */
 function cleanMoneyDigits(value: string) {
   return (value || "").replace(/\D/g, "");
 }
@@ -43,22 +32,20 @@ function cleanMoneyDigits(value: string) {
 function moneyDigitsToBRL(digits: string) {
   const d = cleanMoneyDigits(digits);
   if (!d) return "";
-  const cents = Number(d);
-  return (cents / 100).toLocaleString("pt-BR", {
+
+  return (Number(d) / 100).toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL",
   });
 }
 
-// "641" -> 6.41
 function digitsToReaisNumber(digits: string) {
-  const onlyDigits = (digits || "").replace(/\D/g, "");
+  const onlyDigits = cleanMoneyDigits(digits);
   if (!onlyDigits) return 0;
   return Number(onlyDigits) / 100;
 }
 
-// valor vindo da API -> dígitos
-function apiValueToDigits(value: any) {
+function apiValueToDigits(value: unknown) {
   if (value === null || value === undefined || value === "") return "";
 
   const raw = String(value).trim().replace(/[R$\s]/g, "");
@@ -68,10 +55,8 @@ function apiValueToDigits(value: any) {
   const hasComma = normalized.includes(",");
 
   if (hasDot && hasComma) {
-    // "1.234,56" -> "1234.56"
     normalized = normalized.replace(/\./g, "").replace(",", ".");
   } else if (hasComma && !hasDot) {
-    // "640,00" -> "640.00"
     normalized = normalized.replace(",", ".");
   }
 
@@ -115,9 +100,6 @@ export default function ProdutoEdit() {
     []
   );
 
-  /* =========================
-     UI helpers (padrão novo)
-  ========================= */
   const labelSmall: React.CSSProperties = {
     fontSize: 12,
     fontWeight: 700,
@@ -187,62 +169,69 @@ export default function ProdutoEdit() {
     userSelect: "none",
   };
 
-  /* =========================
-     Load Grupos
-  ========================= */
   useEffect(() => {
-    setLoadingGrupos(true);
-    api
-      .get("/grupos", { params: { limit: 1000 } })
-      .then((res) => setGrupos(res.data.data || []))
-      .catch(() => {
+    async function carregarGrupos() {
+      setLoadingGrupos(true);
+
+      try {
+        const res = await api.get("/grupos", {
+          params: {
+            ativo: true,
+            page: 1,
+            limit: 1000,
+            orderBy: "nome",
+            orderDir: "ASC",
+          },
+        });
+
+        const rows = Array.isArray(res.data)
+          ? res.data
+          : res.data?.data || [];
+
+        setGrupos(Array.isArray(rows) ? rows : []);
+      } catch (error) {
+        console.error(error);
         toast.error("Erro ao carregar grupos");
         setGrupos([]);
-      })
-      .finally(() => setLoadingGrupos(false));
+      } finally {
+        setLoadingGrupos(false);
+      }
+    }
+
+    carregarGrupos();
   }, []);
 
-  /* =========================
-     Load Produto
-  ========================= */
   useEffect(() => {
-    async function loadProduto() {
+    async function carregarProduto() {
+      if (!id) {
+        toast.error("Produto inválido");
+        navigate("/produtos");
+        return;
+      }
+
       try {
         const response = await api.get(`/produtos/${id}`);
         const data = response.data;
-
-        const grupoId = data.grupo_id ? String(data.grupo_id) : "";
-        const subgrupoId = data.subgrupo_id ? String(data.subgrupo_id) : "";
 
         setForm({
           nome: data.nome ?? "",
           descricao: data.descricao ?? "",
           unidade: data.unidade ?? "",
-          grupo_id: grupoId,
-          subgrupo_id: subgrupoId,
+          grupo_id: data.grupo_id ? String(data.grupo_id) : "",
+          subgrupo_id: data.subgrupo_id ? String(data.subgrupo_id) : "",
           preco_referencia: apiValueToDigits(data.preco_referencia),
           custo_medio: apiValueToDigits(data.custo_medio),
           ult_custo: apiValueToDigits(data.ult_custo),
-          estoque_min: data.estoque_min !== null && data.estoque_min !== undefined ? String(data.estoque_min) : "",
+          estoque_min:
+            data.estoque_min !== null && data.estoque_min !== undefined
+              ? String(data.estoque_min)
+              : "",
           cod_barra: data.cod_barra ?? "",
           ativo: Boolean(data.ativo),
         });
-        setControlaLote(!!data.controla_lote);
-        setControlaValidade(!!data.controla_validade);
-        // carrega subgrupos do grupo atual (se houver)
-        if (grupoId) {
-          setLoadingSubgrupos(true);
-          try {
-            const sg = await api.get("/subgrupos", {
-              params: { grupo_id: Number(grupoId) },
-            });
-            setSubgrupos(Array.isArray(sg.data) ? sg.data : []);
-          } catch {
-            setSubgrupos([]);
-          } finally {
-            setLoadingSubgrupos(false);
-          }
-        }
+
+        setControlaLote(Boolean(data.controla_lote));
+        setControlaValidade(Boolean(data.controla_validade));
       } catch (error) {
         console.error(error);
         toast.error("Erro ao carregar produto");
@@ -252,37 +241,74 @@ export default function ProdutoEdit() {
       }
     }
 
-    loadProduto();
+    carregarProduto();
   }, [id, navigate]);
 
-  /* =========================
-     Load Subgrupos on Grupo change
-  ========================= */
   useEffect(() => {
     if (!form.grupo_id) {
       setSubgrupos([]);
+      setLoadingSubgrupos(false);
       return;
     }
 
-    setLoadingSubgrupos(true);
-    api
-      .get("/subgrupos", { params: { grupo_id: Number(form.grupo_id) } })
-      .then((res) => setSubgrupos(Array.isArray(res.data) ? res.data : []))
-      .catch(() => setSubgrupos([]))
-      .finally(() => setLoadingSubgrupos(false));
+    let ativo = true;
+
+    async function carregarSubgrupos() {
+      setLoadingSubgrupos(true);
+      setSubgrupos([]);
+
+      try {
+        const res = await api.get("/subgrupos", {
+          params: {
+            grupo_id: Number(form.grupo_id),
+            ativo: true,
+            page: 1,
+            limit: 1000,
+            orderBy: "nome",
+            orderDir: "ASC",
+          },
+        });
+
+        const rows = Array.isArray(res.data)
+          ? res.data
+          : res.data?.data || [];
+
+        if (ativo) {
+          setSubgrupos(Array.isArray(rows) ? rows : []);
+        }
+      } catch (error) {
+        console.error(error);
+
+        if (ativo) {
+          setSubgrupos([]);
+          toast.error("Erro ao carregar subgrupos");
+        }
+      } finally {
+        if (ativo) {
+          setLoadingSubgrupos(false);
+        }
+      }
+    }
+
+    carregarSubgrupos();
+
+    return () => {
+      ativo = false;
+    };
   }, [form.grupo_id]);
 
-  /* =========================
-     Handlers
-  ========================= */
   function handleChange(
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >
   ) {
     const { name, value } = e.target;
 
     if (moneyFields.has(name)) {
-      const digits = cleanMoneyDigits(value);
-      setForm((prev) => ({ ...prev, [name]: digits }));
+      setForm((prev) => ({
+        ...prev,
+        [name]: cleanMoneyDigits(value),
+      }));
       return;
     }
 
@@ -295,47 +321,46 @@ export default function ProdutoEdit() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    if (!id) {
+      toast.error("Produto inválido");
+      return;
+    }
+
+    if (controlaValidade && !controlaLote) {
+      toast.error("Produto que controla validade deve controlar lote.");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const payload = {
+      await api.put(`/produtos/${id}`, {
         nome: form.nome,
         descricao: form.descricao,
         unidade: form.unidade,
-
         grupo_id: form.grupo_id ? Number(form.grupo_id) : null,
         subgrupo_id: form.subgrupo_id ? Number(form.subgrupo_id) : null,
-
         preco_referencia: digitsToReaisNumber(form.preco_referencia),
         custo_medio: digitsToReaisNumber(form.custo_medio),
         ult_custo: digitsToReaisNumber(form.ult_custo),
-
         cod_barra: form.cod_barra || null,
         estoque_min: form.estoque_min ? Number(form.estoque_min) : 0,
-
         controla_lote: controlaLote,
         controla_validade: controlaValidade,
-
         ativo: form.ativo,
-      };
-      console.log({
-        controla_lote: controlaLote,
-        controla_validade: controlaValidade,
       });
-      await api.put(`/produtos/${id}`, payload);
 
       toast.success("Produto atualizado com sucesso");
       navigate("/produtos");
-    } catch {
+    } catch (error) {
+      console.error(error);
       toast.error("Erro ao atualizar produto");
     } finally {
       setLoading(false);
     }
   }
 
-  /* =========================
-     Render
-  ========================= */
   if (loadingData) {
     return (
       <div style={layoutStyles.page}>
@@ -368,7 +393,6 @@ export default function ProdutoEdit() {
 
       <div style={layoutStyles.card}>
         <form onSubmit={handleSubmit} style={formStyles.form}>
-          {/* ===== Dados do Produto ===== */}
           <div style={sectionCard}>
             <div style={sectionHeaderRow}>
               <div style={sectionTitle}>Dados do Produto</div>
@@ -430,7 +454,6 @@ export default function ProdutoEdit() {
             </div>
           </div>
 
-          {/* ===== Classificação ===== */}
           <div style={sectionCard}>
             <div style={sectionHeaderRow}>
               <div style={sectionTitle}>Classificação</div>
@@ -451,9 +474,10 @@ export default function ProdutoEdit() {
                   <option value="">
                     {loadingGrupos ? "Carregando grupos..." : "Selecione"}
                   </option>
-                  {grupos.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.nome}
+
+                  {grupos.map((grupo) => (
+                    <option key={grupo.id} value={grupo.id}>
+                      {grupo.nome}
                     </option>
                   ))}
                 </select>
@@ -475,12 +499,15 @@ export default function ProdutoEdit() {
                     {!form.grupo_id
                       ? "Selecione um grupo"
                       : loadingSubgrupos
-                        ? "Carregando subgrupos..."
-                        : "Selecione"}
+                      ? "Carregando subgrupos..."
+                      : subgrupos.length === 0
+                      ? "Nenhum subgrupo encontrado"
+                      : "Selecione"}
                   </option>
-                  {subgrupos.map((sg) => (
-                    <option key={sg.id} value={sg.id}>
-                      {sg.nome}
+
+                  {subgrupos.map((subgrupo) => (
+                    <option key={subgrupo.id} value={subgrupo.id}>
+                      {subgrupo.nome}
                     </option>
                   ))}
                 </select>
@@ -488,7 +515,6 @@ export default function ProdutoEdit() {
             </div>
           </div>
 
-          {/* ===== Valores ===== */}
           <div style={sectionCard}>
             <div style={sectionHeaderRow}>
               <div style={sectionTitle}>Valores</div>
@@ -535,7 +561,6 @@ export default function ProdutoEdit() {
             </div>
           </div>
 
-          {/* ===== Complementos ===== */}
           <div style={sectionCard}>
             <div style={sectionHeaderRow}>
               <div style={sectionTitle}>Complementos</div>
@@ -610,11 +635,9 @@ export default function ProdutoEdit() {
                   </label>
                 </div>
               </div>
-
             </div>
           </div>
 
-          {/* ===== Actions (rodapé fixo visual) ===== */}
           <div
             style={{
               marginTop: "auto",
@@ -635,7 +658,11 @@ export default function ProdutoEdit() {
               Cancelar
             </button>
 
-            <button type="submit" style={buttonStyles.primary} disabled={loading}>
+            <button
+              type="submit"
+              style={buttonStyles.primary}
+              disabled={loading}
+            >
               {loading ? "Salvando..." : "Salvar"}
             </button>
           </div>

@@ -197,7 +197,7 @@ export function useCompraCreate() {
       const response = await api.get("/produtos", {
         params: {
           page: 1,
-          limit: 1000,
+          limit: 100000,
         },
       });
 
